@@ -1,3 +1,7 @@
-# Zako2-HQ
+# example-project
 
-Zako2 Headquarter backend.
+## Build
+```
+hpack
+cabal build
+```
