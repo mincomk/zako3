@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 
-name:           hq-sample
+name:           zako3-hq
 version:        0.1.0.0
 author:         mincomk
 maintainer:     mail@drchi.co.kr
@@ -24,7 +24,6 @@ library
       Data.State.Queue
       Data.State.Track
       Data.Types
-      Data.Util.TrackIdGen
       Domain.AudioRequest
       Domain.Sample
       Env.Cache
@@ -35,8 +34,9 @@ library
       Lib
       Serialize.Bson
       Serialize.Str
+      Util.TrackIdGen
   other-modules:
-      Paths_hq_sample
+      Paths_zako3_hq
   hs-source-dirs:
       src
   default-extensions:
@@ -84,10 +84,10 @@ library
     , websockets
   default-language: Haskell2010
 
-executable hq-sample
+executable zako3-hq
   main-is: Main.hs
   other-modules:
-      Paths_hq_sample
+      Paths_zako3_hq
   hs-source-dirs:
       app
   default-extensions:
@@ -119,7 +119,6 @@ executable hq-sample
     , directory
     , generic-optics
     , hedis
-    , hq-sample
     , katip
     , mongoDB
     , mtl
@@ -135,14 +134,15 @@ executable hq-sample
     , unordered-containers
     , wai-websockets
     , websockets
+    , zako3-hq
   default-language: Haskell2010
 
-test-suite hq-sample-test
+test-suite zako3-hq-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
       Data.TypesSpec
-      Paths_hq_sample
+      Paths_zako3_hq
   hs-source-dirs:
       test
   default-extensions:
@@ -175,7 +175,6 @@ test-suite hq-sample-test
     , directory
     , generic-optics
     , hedis
-    , hq-sample
     , hspec
     , hspec-discover
     , hspec-wai
@@ -194,4 +193,5 @@ test-suite hq-sample-test
     , unordered-containers
     , wai-websockets
     , websockets
+    , zako3-hq
   default-language: Haskell2010

@@ -1,4 +1,4 @@
-name: hq-sample
+name: zako3-hq
 version: 0.1.0.0
 license: MIT
 author: "mincomk"
@@ -63,17 +63,17 @@ library:
     - base
 
 executables:
-  hq-sample:
+  zako3-hq:
     main: Main.hs
     source-dirs: app
     ghc-options: -threaded -rtsopts -with-rtsopts=-N
     dependencies:
       - base
 
-      - hq-sample
+      - zako3-hq
 
 tests:
-  hq-sample-test:
+  zako3-hq-test:
     main: Spec.hs
     source-dirs: test
     build-tools:
@@ -81,7 +81,7 @@ tests:
     dependencies:
       - base
 
-      - hq-sample
+      - zako3-hq
 
       - hspec
       - hspec-discover

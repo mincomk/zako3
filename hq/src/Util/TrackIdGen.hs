@@ -1,7 +1,7 @@
-module Data.Util.TrackIdGen (generateTrackId, generateTrackToken) where
+module Util.TrackIdGen (generateTrackId, generateTrackToken) where
 
 import Control.Monad (replicateM)
-import Data.Model.TrackRequest (HashedTrackToken, TrackToken (TrackToken))
+import Data.Model.TrackRequest (TrackToken (TrackToken))
 import Data.State.Track (TrackId (TrackId))
 import Data.Text (Text)
 import qualified Data.Text as T
