@@ -188,8 +188,12 @@ async fn test_stop_many_all() {
     mock_state_service
         .expect_modify_session()
         .with(eq(guild_id), always())
-        .times(2)
+        .times(0)
         .returning(|_, _f| Ok(()));
+
+    mock_state_service
+        .expect_save_session()
+        .returning(|_| Ok(()));
 
     let session_control = SessionControl {
         guild_id,

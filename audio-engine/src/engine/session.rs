@@ -92,10 +92,9 @@ where
     }
 
     pub async fn stop_many(&self, filter: AudioStopFilter) -> ZakoResult<()> {
-        let track_ids = self
-            .state_service
-            .get_session(self.guild_id)
-            .await?
+        let mut session = self.state_service.get_session(self.guild_id).await?;
+        let track_ids = session
+            .as_ref()
             .map(|s| match filter {
                 AudioStopFilter::All => s.get_all_track_ids(),
                 AudioStopFilter::Music => s.get_all_track_ids_by_queue_name_prefix("music"),
@@ -107,11 +106,14 @@ where
 
         for track_id in track_ids {
             self.mixer.remove_source(track_id);
-            self.state_service
-                .modify_session(self.guild_id, move |session| {
-                    session.remove_track(track_id);
-                })
-                .await?;
+
+            if let Some(session) = session.as_mut() {
+                session.remove_track(track_id);
+            }
+        }
+
+        if let Some(session) = session {
+            self.state_service.save_session(&session).await?;
         }
 
         Ok(())
