@@ -1,6 +1,10 @@
 [workspace]
 resolver = "3"
-members = ["audio-engine","crates/discord-oauth2", "crates/zako3-data"]
+members = ["audio-engine/controller","audio-engine/core", "audio-engine/infra", "audio-engine/types","crates/discord-oauth2", "crates/zako3-data", "taphub"]
+
+[workspace.dependencies]
+zako3-audio-engine-types = { path = "audio-engine/types" }
+zako3-audio-engine-core = { path = "audio-engine/core" }
 
 [profile.dev]
 incremental = false

@@ -1,0 +1,16 @@
+[package]
+name = "zako3-audio-engine-controller"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+prost = "0.14.1"
+tokio = { version = "1.49.0", features = ["full"] }
+tonic = "0.14.2"
+tonic-prost = "0.14.2"
+zako3-audio-engine-types.workspace = true
+zako3-audio-engine-core.workspace = true
+
+[build-dependencies]
+tonic-build = "0.14.2"
+tonic-prost-build = "0.14.2"
