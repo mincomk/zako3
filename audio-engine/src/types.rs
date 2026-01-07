@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use derive_more::{From, FromStr, Into};
 use serde::{Deserialize, Serialize};
+use tokio::io::AsyncRead;
 
 use crate::constant::BUFFER_SIZE;
 
@@ -37,6 +38,15 @@ pub struct AudioRequestString(String);
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Into, From, FromStr, Serialize, Deserialize)]
 pub struct StreamCacheKey(String);
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Into, From, FromStr, Serialize, Deserialize)]
+pub struct TrackDescription(String);
+
+pub struct AudioResponse {
+    pub cache_key: Option<StreamCacheKey>,
+    pub description: TrackDescription,
+    pub stream: Box<dyn AsyncRead + Send + Unpin>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AudioStopFilter {
     All,
@@ -51,6 +61,13 @@ pub struct AudioRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CachedAudioRequest {
+    pub tap_name: TapName,
+    pub audio_request: AudioRequestString,
+    pub cache_key: StreamCacheKey,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionState {
     pub guild_id: GuildId,
     pub channel_id: ChannelId,
@@ -60,9 +77,16 @@ pub struct SessionState {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Track {
     pub track_id: TrackId,
-    pub request: AudioRequest,
+    pub description: TrackDescription,
+    pub request: CachedAudioRequest,
     pub volume: Volume,
     pub queue_name: QueueName,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AudioMetaResponse {
+    pub description: TrackDescription,
+    pub cache_key: StreamCacheKey,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

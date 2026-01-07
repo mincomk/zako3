@@ -8,8 +8,8 @@ use crate::{
     engine::{mixer::MockMixer, session::SessionControl},
     service::{MockStateService, MockTapHubService},
     types::{
-        AudioRequest, AudioRequestString, AudioStopFilter, GuildId, QueueName, SessionState,
-        TapName, Track, TrackId, Volume,
+        AudioRequestString, AudioStopFilter, CachedAudioRequest, GuildId, QueueName, SessionState,
+        StreamCacheKey, TapName, Track, TrackDescription, TrackId, Volume,
     },
 };
 
@@ -149,9 +149,11 @@ async fn test_stop_many_all() {
                 QueueName::from("q1".to_string()),
                 vec![Track {
                     track_id: track_id_1,
-                    request: AudioRequest {
+                    description: TrackDescription::from("desc1".to_string()),
+                    request: CachedAudioRequest {
                         tap_name: TapName::from("t".to_string()),
-                        request: AudioRequestString::from("r".to_string()),
+                        audio_request: AudioRequestString::from("req1".to_string()),
+                        cache_key: StreamCacheKey::from("r".to_string()),
                     },
                     volume: Volume::from(1.0),
                     queue_name: QueueName::from("q1".to_string()),
@@ -161,9 +163,11 @@ async fn test_stop_many_all() {
                 QueueName::from("q2".to_string()),
                 vec![Track {
                     track_id: track_id_2,
-                    request: AudioRequest {
+                    description: TrackDescription::from("desc2".to_string()),
+                    request: CachedAudioRequest {
                         tap_name: TapName::from("t".to_string()),
-                        request: AudioRequestString::from("r".to_string()),
+                        audio_request: AudioRequestString::from("req2".to_string()),
+                        cache_key: StreamCacheKey::from("r".to_string()),
                     },
                     volume: Volume::from(1.0),
                     queue_name: QueueName::from("q2".to_string()),
@@ -229,18 +233,22 @@ async fn test_next_music() {
                 vec![
                     Track {
                         track_id: current_track_id,
-                        request: AudioRequest {
+                        description: TrackDescription::from("current".to_string()),
+                        request: CachedAudioRequest {
                             tap_name: TapName::from("t".to_string()),
-                            request: AudioRequestString::from("r".to_string()),
+                            audio_request: AudioRequestString::from("req".to_string()),
+                            cache_key: StreamCacheKey::from("r".to_string()),
                         },
                         volume: Volume::from(1.0),
                         queue_name: QueueName::from("music".to_string()),
                     },
                     Track {
                         track_id: next_track_id,
-                        request: AudioRequest {
+                        description: TrackDescription::from("next".to_string()),
+                        request: CachedAudioRequest {
                             tap_name: TapName::from("t".to_string()),
-                            request: AudioRequestString::from("r".to_string()),
+                            audio_request: AudioRequestString::from("req".to_string()),
+                            cache_key: StreamCacheKey::from("r".to_string()),
                         },
                         volume: Volume::from(1.0),
                         queue_name: QueueName::from("music".to_string()),

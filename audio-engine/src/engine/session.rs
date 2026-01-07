@@ -8,8 +8,8 @@ use crate::{
     error::ZakoResult,
     service::{StateService, TapHubService},
     types::{
-        AudioRequest, AudioRequestString, AudioStopFilter, GuildId, QueueName, TapName, Track,
-        TrackId, Volume,
+        AudioRequest, AudioRequestString, AudioStopFilter, CachedAudioRequest, GuildId, QueueName,
+        TapName, Track, TrackId, Volume,
     },
     util::id_gen,
 };
@@ -48,13 +48,22 @@ where
     ) -> ZakoResult<TrackId> {
         let track_id: TrackId = id_gen::generate_id();
 
+        let ar = AudioRequest {
+            tap_name: tap_name.clone(),
+            request: request.clone(),
+        };
+
+        let meta = self.taphub_service.request_audio_meta(ar.clone()).await?;
+
         self.state_service
             .modify_session(self.guild_id, move |session| {
                 let track = Track {
                     track_id,
-                    request: AudioRequest {
-                        tap_name: tap_name.clone(),
-                        request: request.clone(),
+                    description: meta.description,
+                    request: CachedAudioRequest {
+                        tap_name,
+                        audio_request: request,
+                        cache_key: meta.cache_key,
                     },
                     volume,
                     queue_name: queue_name.clone(),
@@ -167,19 +176,15 @@ where
         Ok(())
     }
 
-    pub async fn set_paused(&self, paused: bool) -> ZakoResult<()> {
-        todo!()
-    }
-
     async fn play_now(&self, track: Track) -> ZakoResult<()> {
-        let stream = self
+        let response = self
             .taphub_service
             .request_audio(track.request.clone())
             .await?;
 
-        let consumer = self
-            .decoder
-            .start_decoding(track.track_id, stream, self.end_tx.clone())?;
+        let consumer =
+            self.decoder
+                .start_decoding(track.track_id, response.stream, self.end_tx.clone())?;
 
         self.mixer.add_source(track.track_id, consumer);
         self.mixer.set_volume(track.track_id, track.volume.into());
