@@ -4,7 +4,7 @@ use dashmap::DashMap;
 
 use crate::{
     ArcDiscordService, ArcStateService, ArcTapHubService, StreamInput, SymphoniaDecoder,
-    TapHubService, create_boxed_ringbuf_pair,
+    create_boxed_ringbuf_pair,
     error::ZakoResult,
     mixer::create_thread_mixer,
     session::{SessionControl, create_session_control},
@@ -81,5 +81,9 @@ impl SessionManager {
         self.sessions.remove(&guild_id);
 
         Ok(())
+    }
+
+    pub fn get_session(&self, guild_id: GuildId) -> Option<Arc<SessionControl>> {
+        self.sessions.get(&guild_id).map(|s| s.clone())
     }
 }

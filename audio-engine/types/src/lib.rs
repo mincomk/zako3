@@ -32,6 +32,12 @@ pub struct Volume(f32);
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Into, From, FromStr, Serialize, Deserialize)]
 pub struct AudioRequestString(String);
 
+impl std::fmt::Display for AudioRequestString {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Into, From, FromStr, Serialize, Deserialize)]
 pub struct StreamCacheKey(String);
 
