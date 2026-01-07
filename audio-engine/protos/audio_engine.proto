@@ -1,5 +1,5 @@
 syntax = "proto3";
-package audioengine;
+package audio_engine;
 
 service AudioEngine {
   rpc Join(JoinRequest) returns (OkResponse);
