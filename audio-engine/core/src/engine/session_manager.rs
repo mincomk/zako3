@@ -4,7 +4,7 @@ use dashmap::DashMap;
 
 use crate::{
     ArcDiscordService, ArcStateService, ArcTapHubService, StreamInput, SymphoniaDecoder,
-    TapHubService, create_boxed_ringbuf_pair,
+    create_boxed_ringbuf_pair,
     error::ZakoResult,
     mixer::create_thread_mixer,
     session::{SessionControl, create_session_control},

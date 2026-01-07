@@ -12,7 +12,7 @@
       in {
         devShells.default = pkgs.mkShell {
           name = "zako3";
-          buildInputs = with pkgs; [ openssl pkg-config ];
+          buildInputs = with pkgs; [ openssl libopus pkg-config ];
         };
       });
 }
