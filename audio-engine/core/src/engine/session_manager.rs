@@ -82,4 +82,8 @@ impl SessionManager {
 
         Ok(())
     }
+
+    pub fn get_session(&self, guild_id: GuildId) -> Option<Arc<SessionControl>> {
+        self.sessions.get(&guild_id).map(|s| s.clone())
+    }
 }
