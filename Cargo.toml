@@ -1,11 +1,12 @@
 [workspace]
 resolver = "3"
-members = ["audio-engine/controller","audio-engine/core", "audio-engine/infra", "audio-engine/telemetry", "audio-engine/types", "taphub", "zakoctl"]
+members = ["audio-engine/controller","audio-engine/core", "audio-engine/infra", "audio-engine/protos", "audio-engine/telemetry", "audio-engine/types", "taphub", "zakoctl"]
 
 [workspace.dependencies]
 zako3-audio-engine-types = { path = "audio-engine/types" }
 zako3-audio-engine-core = { path = "audio-engine/core" }
 zako3-audio-engine-infra = { path = "audio-engine/infra" }
+zako3-audio-engine-protos = { path = "audio-engine/protos" }
 
 [profile.dev]
 incremental = false

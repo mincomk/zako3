@@ -2,7 +2,8 @@ use std::result::Result;
 use std::sync::Arc;
 use tonic::{Request, Response, Status};
 
-use crate::proto::audio_engine_server::AudioEngine;
+use zako3_audio_engine_protos as proto;
+use zako3_audio_engine_protos::audio_engine_server::AudioEngine;
 
 use zako3_audio_engine_core::engine::session_manager::SessionManager;
 use zako3_audio_engine_core::types::{
@@ -11,11 +12,6 @@ use zako3_audio_engine_core::types::{
 };
 
 pub mod config;
-
-// Re-export proto module
-pub mod proto {
-    tonic::include_proto!("audio_engine");
-}
 
 pub struct AudioEngineServer {
     pub session_manager: Arc<SessionManager>,

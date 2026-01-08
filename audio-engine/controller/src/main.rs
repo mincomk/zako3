@@ -4,10 +4,8 @@ use serenity::Client;
 use serenity::all::GatewayIntents;
 use songbird::SerenityInit;
 
-use zako3_audio_engine_controller::{
-    AudioEngineServer, config::AppConfig,
-    proto::audio_engine_server::AudioEngineServer as GrpcServer,
-};
+use zako3_audio_engine_controller::{AudioEngineServer, config::AppConfig};
+use zako3_audio_engine_protos::audio_engine_server::AudioEngineServer as GrpcServer;
 
 use zako3_audio_engine_core::engine::session_manager::SessionManager;
 use zako3_audio_engine_infra::{
