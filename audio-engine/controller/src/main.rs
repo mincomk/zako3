@@ -12,9 +12,10 @@ use zako3_audio_engine_controller::{
 use zako3_audio_engine_core::{
     engine::session_manager::SessionManager,
     service::{
-        discord::SongbirdDiscordService, state::RedisStateService, taphub::StubTapHubService,
+        discord::SongbirdDiscordService, taphub::StubTapHubService,
     },
 };
+use zako3_audio_engine_infra::RedisStateService;
 
 use tonic::transport::Server;
 
