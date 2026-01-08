@@ -21,6 +21,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - uses: arduino/setup-protoc@v3
       - uses: actions/checkout@v4
       - name: Build
         run: cargo build --verbose
@@ -31,6 +32,7 @@ jobs:
 
     steps:
       - uses: olix0r/cargo-action-fmt/setup@v2
+      - uses: arduino/setup-protoc@v3
       - uses: actions/checkout@v4
       - name: Check
         run: cargo check -q --message-format=json | cargo-action-fmt
