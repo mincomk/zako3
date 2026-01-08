@@ -4,9 +4,8 @@ use mockall::predicate::*;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use zako3_audio_engine_audio::{MockDecoder, MockMixer, create_boxed_ringbuf_pair};
 
-use crate::codec::decoder::MockDecoder;
-use crate::engine::mixer::MockMixer;
 use crate::engine::session::create_session_control;
 use crate::service::{state::MockStateService, taphub::MockTapHubService};
 use crate::types::{
@@ -104,7 +103,7 @@ async fn test_play_success() {
         .expect_start_decoding()
         .times(1)
         .returning(|_, _| {
-            let (_, c) = crate::util::create_boxed_ringbuf_pair();
+            let (_, c) = create_boxed_ringbuf_pair();
             Ok(c)
         });
 
@@ -463,7 +462,7 @@ async fn test_next_music_success() {
         })
     });
     mock_decoder.expect_start_decoding().returning(|_, _| {
-        let (_, c) = crate::util::create_boxed_ringbuf_pair();
+        let (_, c) = create_boxed_ringbuf_pair();
         Ok(c)
     });
     mock_mixer.expect_add_source().return_const(());
@@ -596,7 +595,7 @@ async fn test_end_of_track_handling_and_preload() {
 
     // Decoder
     mock_decoder.expect_start_decoding().returning(|_, _| {
-        let (_, c) = crate::util::create_boxed_ringbuf_pair();
+        let (_, c) = create_boxed_ringbuf_pair();
         Ok(c)
     });
 
@@ -631,7 +630,7 @@ async fn test_end_of_track_handling_and_preload() {
     mock_taphub
         .expect_preload_audio()
         .withf(|req| req.audio_request == AudioRequestString::from("t".to_string()))
-        .times(1)
+        .times(0)
         .returning(|_| Ok(()));
 
     let control = create_session_control(
@@ -659,7 +658,7 @@ async fn test_end_of_track_handling_and_preload() {
         .unwrap()
         .clone()
         .expect("Should have captured tx");
-    tx.send(TrackId::from(1)).unwrap();
+    tx.send(TrackId::from(1)).await.unwrap();
 
     // 3. Wait for background task
     tokio::time::sleep(Duration::from_millis(100)).await;

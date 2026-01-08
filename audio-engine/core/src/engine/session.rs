@@ -1,11 +1,12 @@
 use std::{collections::HashMap, sync::Arc};
 
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::Sender;
+use tracing::instrument;
 
 use crate::{
-    ArcDecoder, ArcStateService, ArcTapHubService,
+    ArcStateService, ArcTapHubService,
+    audio::{ArcDecoder, ArcMixer},
     error::ZakoResult,
-    mixer::ArcMixer,
     modify_state_session,
     types::{
         AudioRequest, AudioRequestString, AudioStopFilter, CachedAudioRequest, GuildId, QueueName,
@@ -20,7 +21,7 @@ pub struct SessionControl {
     pub(crate) mixer: ArcMixer,
     pub(crate) decoder: ArcDecoder,
 
-    pub(crate) end_tx: UnboundedSender<TrackId>,
+    pub(crate) end_tx: Sender<TrackId>,
 
     pub(crate) state_service: ArcStateService,
     pub(crate) taphub_service: ArcTapHubService,
@@ -29,7 +30,7 @@ pub struct SessionControl {
 impl SessionControl {
     fn new(
         guild_id: GuildId,
-        end_tx: UnboundedSender<TrackId>,
+        end_tx: Sender<TrackId>,
         mixer: ArcMixer,
         decoder: ArcDecoder,
         state_service: ArcStateService,
@@ -45,6 +46,7 @@ impl SessionControl {
         }
     }
 
+    #[instrument(skip(self))]
     pub async fn play(
         &self,
         queue_name: QueueName,
@@ -52,6 +54,15 @@ impl SessionControl {
         request: AudioRequestString,
         volume: Volume,
     ) -> ZakoResult<TrackId> {
+        tracing::debug!(
+            "Playing audio in guild {:?}, queue {:?}, tap {:?}, request {:?}, volume {:?}",
+            self.guild_id,
+            queue_name,
+            tap_name,
+            request,
+            volume
+        );
+
         let track_id: TrackId = id_gen::generate_id();
 
         let ar = AudioRequest {
@@ -83,6 +94,7 @@ impl SessionControl {
         Ok(track_id)
     }
 
+    #[instrument(skip(self))]
     pub async fn set_volume(&self, track_id: TrackId, volume: Volume) -> ZakoResult<()> {
         self.mixer.set_volume(track_id, volume.into());
         modify_state_session(&self.state_service, self.guild_id, move |session| {
@@ -94,6 +106,7 @@ impl SessionControl {
         Ok(())
     }
 
+    #[instrument(skip(self))]
     pub async fn stop(&self, track_id: TrackId) -> ZakoResult<()> {
         self.mixer.remove_source(track_id);
         modify_state_session(&self.state_service, self.guild_id, move |session| {
@@ -106,6 +119,7 @@ impl SessionControl {
         Ok(())
     }
 
+    #[instrument(skip(self))]
     pub async fn stop_many(&self, filter: AudioStopFilter) -> ZakoResult<()> {
         let mut session = self.state_service.get_session(self.guild_id).await?;
         let track_ids = session
@@ -136,6 +150,7 @@ impl SessionControl {
         Ok(())
     }
 
+    #[instrument(skip(self))]
     pub async fn next_music(&self) -> ZakoResult<()> {
         let music_tracks = self
             .state_service
@@ -167,6 +182,7 @@ impl SessionControl {
     }
 
     /// Reconcile the session state with the mixer state
+    #[instrument(skip(self))]
     async fn reconcile(&self) -> ZakoResult<()> {
         let session = self.state_service.get_session(self.guild_id).await?;
 
@@ -183,7 +199,14 @@ impl SessionControl {
         Ok(())
     }
 
+    #[instrument(skip(self))]
     async fn play_now(&self, track: Track) -> ZakoResult<()> {
+        tracing::debug!(
+            "Starting playback for track {:?} in guild {:?}",
+            track.track_id,
+            self.guild_id
+        );
+
         let response = self
             .taphub_service
             .request_audio(track.request.clone())
@@ -191,7 +214,8 @@ impl SessionControl {
 
         let consumer = self
             .decoder
-            .start_decoding(track.track_id, response.stream)?;
+            .start_decoding(track.track_id, response.stream)
+            .await?;
 
         self.mixer
             .add_source(track.track_id, consumer, self.end_tx.clone());
@@ -247,7 +271,7 @@ pub fn create_session_control(
     state_service: ArcStateService,
     taphub_service: ArcTapHubService,
 ) -> Arc<SessionControl> {
-    let (end_tx, end_rx) = tokio::sync::mpsc::unbounded_channel();
+    let (end_tx, end_rx) = tokio::sync::mpsc::channel(16);
 
     let session_control = Arc::new(SessionControl::new(
         guild_id,

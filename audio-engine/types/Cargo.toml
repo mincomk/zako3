@@ -12,3 +12,4 @@ songbird = "0.5.0"
 symphonia = "0.5.5"
 thiserror = "2.0.17"
 tokio = { version = "1.49.0", features = ["full"] }
+crossbeam = { version = "0.8.4", features = ["crossbeam-channel"] }

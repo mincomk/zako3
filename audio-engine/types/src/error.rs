@@ -19,6 +19,9 @@ pub enum ZakoError {
 
     #[error("Songbird error: {0}")]
     Songbird(#[from] songbird::error::JoinError),
+
+    #[error("Crossbeam recv error: {0}")]
+    CrossbeamRecv(#[from] crossbeam::channel::RecvError),
 }
 
 pub type ZakoResult<T> = Result<T, ZakoError>;

@@ -13,11 +13,20 @@ use zako3_audio_engine_infra::{
 };
 
 use tonic::transport::Server;
+use zako3_audio_engine_telemetry::TelemetryConfig;
 
-#[tokio::main]
+#[tokio::main(flavor = "multi_thread", worker_threads = 32)]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = AppConfig::load();
     let addr = config.addr();
+
+    let telem_config = TelemetryConfig {
+        service_name: "audio-engine".into(),
+        otlp_endpoint: None,
+        metrics_port: 9090,
+    };
+
+    let telemetry = zako3_audio_engine_telemetry::init(telem_config).await?;
 
     let intents = GatewayIntents::GUILD_VOICE_STATES;
     let mut client = Client::builder(&config.discord_token, intents)
@@ -52,6 +61,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!("Audio Engine Server listening on {}", addr);
 
     let engine_server = AudioEngineServer::new(session_manager);
+
+    telemetry.healthy();
 
     Server::builder()
         .add_service(GrpcServer::new(engine_server))
