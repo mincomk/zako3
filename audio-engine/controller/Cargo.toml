@@ -15,7 +15,7 @@ serenity = { version = "0.12", default-features = false, features = ["client", "
 songbird = "0.5.0"
 zako3-audio-engine-types.workspace = true
 zako3-audio-engine-core.workspace = true
-zako3-audio-engine-infra = { path = "../infra" }
+zako3-audio-engine-infra.workspace = true
 
 [build-dependencies]
 tonic-build = "0.14.2"

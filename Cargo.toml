@@ -5,6 +5,7 @@ members = ["audio-engine/controller","audio-engine/core", "audio-engine/infra", 
 [workspace.dependencies]
 zako3-audio-engine-types = { path = "audio-engine/types" }
 zako3-audio-engine-core = { path = "audio-engine/core" }
+zako3-audio-engine-infra = { path = "audio-engine/infra" }
 
 [profile.dev]
 incremental = false
