@@ -1,49 +1,80 @@
-# zakoctl
+# zakoctl Usage Guide
 
-`zakoctl` is the official development CLI client for Zako services. It is designed with a modular architecture similar to `kubectl`, allowing for extensible management of various Zako microservices.
+`zakoctl` is a command-line interface for managing and developing Zako services, specifically the Audio Engine. This guide provides common workflows and examples.
 
-## Architecture
+## Prerequisites
 
-`zakoctl` is built with:
-- **Rust**: For performance and reliability.
-- **Tokio**: Asynchronous runtime.
-- **Clap**: Robust command-line argument parsing.
-- **Tonic**: gRPC client implementation.
-- **Modular Design**: Each service (e.g., Audio Engine) is encapsulated in its own module under `src/services/`, making it easy to add new service integrations.
+- **Zako Audio Engine** running (default: `http://[::1]:50051`)
+- **zakoctl** installed or built
 
-## Installation
+## Quick Start
+
+### 1. Configuration (Optional)
+By default, `zakoctl` connects to localhost. If your service is remote, set a context:
 
 ```bash
-cargo install --path .
+# Create a context for a remote server
+zakoctl config set-context dev --ae-addr "http://192.168.1.100:50051"
+
+# Switch to that context
+zakoctl config use-context dev
 ```
 
-## Features
+### 2. Audio Engine Workflow
 
-- **Context Management**: Switch between different environments (local, dev, prod) using `config` commands.
-- **Auto-completion**: Built-in shell completion generation for Bash, Zsh, Fish, PowerShell, and Elvish.
-- **Rich Output**: Colored and formatted output for better readability.
-- **Extensible**: Follows a strict service-module pattern for easy expansion.
-
-## Services
-
-### Audio Engine (`ae`)
-Full control over the Zako Audio Engine via gRPC.
-- **Session Management**: Join/Leave channels.
-- **Playback Control**: Play, Stop, Skip, Set Volume.
-- **State Inspection**: View current tracks and session status.
-- **Advanced Filtering**: Stop specific types of audio (Music vs TTS).
-
-## Configuration
-
-Configuration is stored in `~/.config/zakoctl/config.toml` (Linux), `~/Library/Application Support/zakoctl/config.toml` (macOS), or `%APPDATA%\zakoctl\config.toml` (Windows).
-
-Manage it via the CLI:
+**Join a Voice Channel**
 ```bash
-zakoctl config view
-zakoctl config set-context ...
-zakoctl config use-context ...
+# Syntax: zakoctl ae join <guild_id> <channel_id>
+zakoctl ae join 123456789 987654321
 ```
 
-## Documentation
+**Play Music**
+```bash
+# Syntax: zakoctl ae play <guild_id> <url> [options]
+# Default tap is 'ytdl'
+zakoctl ae play 123456789 "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+```
 
-For detailed usage instructions, see [USAGE.md](USAGE.md).
+**Check Status**
+```bash
+# See what's playing
+zakoctl ae get-session-state 123456789
+```
+
+**Control Playback**
+```bash
+# Skip current track
+zakoctl ae next-music 123456789
+
+# Stop all music
+zakoctl ae stop-many 123456789 --filter music
+
+# Leave channel
+zakoctl ae leave 123456789
+```
+
+## Shell Auto-completion
+
+Enable tab completion for a better experience.
+
+**Bash**
+```bash
+source <(zakoctl completion bash)
+```
+
+**Zsh**
+```bash
+zakoctl completion zsh > /usr/local/share/zsh/site-functions/_zakoctl
+# Or for one session:
+source <(zakoctl completion zsh)
+```
+
+**Fish**
+```bash
+zakoctl completion fish | source
+```
+
+## Troubleshooting
+
+- **Connection Refused**: Check if the Audio Engine is running and the address in `zakoctl config view` matches.
+- **Color Output**: Uses ANSI colors. If output looks raw, ensure your terminal supports colors.
