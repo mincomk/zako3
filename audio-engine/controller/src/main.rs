@@ -9,11 +9,9 @@ use zako3_audio_engine_controller::{
     proto::audio_engine_server::AudioEngineServer as GrpcServer,
 };
 
-use zako3_audio_engine_core::{
-    engine::session_manager::SessionManager,
-    service::{
-        discord::SongbirdDiscordService, state::RedisStateService, taphub::StubTapHubService,
-    },
+use zako3_audio_engine_core::engine::session_manager::SessionManager;
+use zako3_audio_engine_infra::{
+    discord::SongbirdDiscordService, state::RedisStateService, taphub::StubTapHubService,
 };
 
 use tonic::transport::Server;
