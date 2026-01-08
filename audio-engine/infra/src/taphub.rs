@@ -1,5 +1,3 @@
-use std::io::Cursor;
-
 use async_trait::async_trait;
 use zako3_audio_engine_core::{
     error::ZakoResult,
@@ -12,12 +10,12 @@ use zako3_audio_engine_core::{
 
 pub struct StubTapHubService;
 
+static DUMMY_AUDIO_DATA: &[u8] = include_bytes!("../dlwlrma.mp3");
+
 #[async_trait]
 impl TapHubService for StubTapHubService {
     async fn request_audio(&self, request: CachedAudioRequest) -> ZakoResult<AudioResponse> {
-        // Return dummy response
-        let dummy_data = b"dummy audio data";
-        let cursor = Cursor::new(dummy_data.to_vec());
+        let cursor = std::io::Cursor::new(DUMMY_AUDIO_DATA.to_vec());
 
         Ok(AudioResponse {
             cache_key: Some(request.cache_key),
