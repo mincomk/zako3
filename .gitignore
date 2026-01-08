@@ -1,6 +1,8 @@
 # Created by https://www.toptal.com/developers/gitignore/api/rust-analyzer,rust,node
 # Edit at https://www.toptal.com/developers/gitignore?templates=rust-analyzer,rust,node
 
+.direnv
+
 ### Node ###
 # Logs
 logs
@@ -167,3 +169,34 @@ rust-project.json
 # End of https://www.toptal.com/developers/gitignore/api/rust-analyzer,rust,node
 
 tarpaulin-report.html
+
+think/
+
+
+### Haskell ###
+dist
+dist-*
+cabal-dev
+*.o
+*.hi
+*.hie
+*.chi
+*.chs.h
+*.dyn_o
+*.dyn_hi
+.hpc
+.hsenv
+.cabal-sandbox/
+cabal.sandbox.config
+*.prof
+*.aux
+*.hp
+*.eventlog
+.stack-work/
+cabal.project.local
+cabal.project.local~
+.HTF/
+.ghc.environment.*
+
+.direnv
+
