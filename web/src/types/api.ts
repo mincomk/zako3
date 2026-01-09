@@ -17,11 +17,6 @@ export interface PaginatedResponse<T> {
 
 export type SortDirection = 'asc' | 'desc'
 
-export interface SortParams<T extends string = string> {
-  field: T
-  direction: SortDirection
-}
-
 export interface ApiError {
   code: string
   message: string

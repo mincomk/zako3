@@ -8,3 +8,10 @@ export { LoadingSkeleton } from './loading-skeleton'
 export { ConfirmDialog } from './confirm-dialog'
 export { DataPagination } from './data-pagination'
 export { TimeSeriesChart } from './time-series-chart'
+export {
+  DataTable,
+  DataTableHeader,
+  DataTableLoading,
+  DataTableEmpty,
+  type DataTableColumn,
+} from './data-table'

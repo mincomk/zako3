@@ -1,4 +1,5 @@
 import { apiClient, buildQueryString } from '@/lib/api-client'
+import { apiCall } from '@/lib/api-helpers'
 import type {
   PaginatedResponse,
   PaginationParams,
@@ -8,8 +9,7 @@ import type {
 } from '@/types'
 
 interface GetNotificationsParams
-  extends Partial<PaginationParams>,
-    Partial<NotificationFilters> {
+  extends Partial<PaginationParams>, Partial<NotificationFilters> {
   sortField?: NotificationSort['field']
   sortDirection?: NotificationSort['direction']
 }
@@ -28,35 +28,29 @@ export const notificationsApi = {
       sortField: params.sortField,
       sortDirection: params.sortDirection,
     })
-    const response = await apiClient.get<PaginatedResponse<Notification>>(
-      `/notifications${query}`
+    return apiCall(
+      apiClient.get<PaginatedResponse<Notification>>(`/notifications${query}`)
     )
-    if (response.error) throw new Error(response.error.message)
-    return response.data
   },
 
   getUnreadCount: async (): Promise<{ count: number }> => {
-    const response = await apiClient.get<{ count: number }>('/notifications/unread-count')
-    if (response.error) throw new Error(response.error.message)
-    return response.data
+    return apiCall(
+      apiClient.get<{ count: number }>('/notifications/unread-count')
+    )
   },
 
   markAsRead: async (notificationId: string): Promise<Notification> => {
-    const response = await apiClient.patch<Notification>(
-      `/notifications/${notificationId}/read`
+    return apiCall(
+      apiClient.patch<Notification>(`/notifications/${notificationId}/read`)
     )
-    if (response.error) throw new Error(response.error.message)
-    return response.data
   },
 
   markAllAsRead: async (): Promise<void> => {
-    const response = await apiClient.patch('/notifications/read-all')
-    if (response.error) throw new Error(response.error.message)
+    return apiCall(apiClient.patch('/notifications/read-all'))
   },
 
   deleteNotification: async (notificationId: string): Promise<void> => {
-    const response = await apiClient.delete(`/notifications/${notificationId}`)
-    if (response.error) throw new Error(response.error.message)
+    return apiCall(apiClient.delete(`/notifications/${notificationId}`))
   },
 
   getAdminNotifications: async (
@@ -71,10 +65,10 @@ export const notificationsApi = {
       sortField: params.sortField,
       sortDirection: params.sortDirection,
     })
-    const response = await apiClient.get<PaginatedResponse<Notification>>(
-      `/admin/notifications${query}`
+    return apiCall(
+      apiClient.get<PaginatedResponse<Notification>>(
+        `/admin/notifications${query}`
+      )
     )
-    if (response.error) throw new Error(response.error.message)
-    return response.data
   },
 }

@@ -1,2 +1,9 @@
-export * from './api'
-export * from './hooks'
+export { adminApi } from './api'
+export {
+  adminKeys,
+  useAdminActivity,
+  usePendingVerifications,
+  useVerificationRequests,
+  useApproveVerification,
+  useRejectVerification,
+} from './hooks'

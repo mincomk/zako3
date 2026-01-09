@@ -1,2 +1,10 @@
 export { notificationsApi } from './api'
-export * from './hooks'
+export {
+  notificationKeys,
+  useNotifications,
+  useUnreadCount,
+  useMarkAsRead,
+  useMarkAllAsRead,
+  useDeleteNotification,
+  useAdminNotifications,
+} from './hooks'

@@ -1,4 +1,5 @@
 import { apiClient, buildQueryString } from '@/lib/api-client'
+import { apiCall } from '@/lib/api-helpers'
 import type {
   PaginatedResponse,
   PaginationParams,
@@ -20,19 +21,13 @@ export const adminApi = {
       page: params.page,
       perPage: params.perPage,
     })
-    const response = await apiClient.get<PaginatedResponse<AdminActivity>>(
-      `/admin/activity${query}`
+    return apiCall(
+      apiClient.get<PaginatedResponse<AdminActivity>>(`/admin/activity${query}`)
     )
-    if (response.error) throw new Error(response.error.message)
-    return response.data
   },
 
   getPendingVerifications: async (): Promise<Tap[]> => {
-    const response = await apiClient.get<Tap[]>(
-      '/admin/taps/pending-verification'
-    )
-    if (response.error) throw new Error(response.error.message)
-    return response.data
+    return apiCall(apiClient.get<Tap[]>('/admin/taps/pending-verification'))
   },
 
   getVerificationRequests: async (
@@ -43,30 +38,23 @@ export const adminApi = {
       perPage: params.perPage,
       status: params.status,
     })
-    const response = await apiClient.get<
-      PaginatedResponse<VerificationRequestFull>
-    >(`/admin/verifications${query}`)
-    if (response.error) throw new Error(response.error.message)
-    return response.data
+    return apiCall(
+      apiClient.get<PaginatedResponse<VerificationRequestFull>>(
+        `/admin/verifications${query}`
+      )
+    )
   },
 
   approveVerification: async (requestId: string): Promise<void> => {
-    const response = await apiClient.post(
-      `/admin/verifications/${requestId}/approve`
-    )
-    if (response.error) throw new Error(response.error.message)
+    return apiCall(apiClient.post(`/admin/verifications/${requestId}/approve`))
   },
 
   rejectVerification: async (
     requestId: string,
     reason: string
   ): Promise<void> => {
-    const response = await apiClient.post(
-      `/admin/verifications/${requestId}/reject`,
-      {
-        reason,
-      }
+    return apiCall(
+      apiClient.post(`/admin/verifications/${requestId}/reject`, { reason })
     )
-    if (response.error) throw new Error(response.error.message)
   },
 }

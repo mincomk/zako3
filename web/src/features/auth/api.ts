@@ -1,4 +1,5 @@
 import { apiClient } from '@/lib/api-client'
+import { apiCall } from '@/lib/api-helpers'
 import type {
   AuthUser,
   LoginResponse,
@@ -8,17 +9,13 @@ import type {
 
 export const authApi = {
   getLoginUrl: async (): Promise<LoginResponse> => {
-    const response = await apiClient.get<LoginResponse>('/auth/login')
-    if (response.error) throw new Error(response.error.message)
-    return response.data
+    return apiCall(apiClient.get<LoginResponse>('/auth/login'))
   },
 
   handleCallback: async (code: string): Promise<AuthCallbackResponse> => {
-    const response = await apiClient.get<AuthCallbackResponse>(
-      `/auth/callback?code=${code}`
+    return apiCall(
+      apiClient.get<AuthCallbackResponse>(`/auth/callback?code=${code}`)
     )
-    if (response.error) throw new Error(response.error.message)
-    return response.data
   },
 
   logout: async (): Promise<void> => {
@@ -26,14 +23,10 @@ export const authApi = {
   },
 
   refreshToken: async (): Promise<RefreshTokenResponse> => {
-    const response = await apiClient.get<RefreshTokenResponse>('/auth/refresh')
-    if (response.error) throw new Error(response.error.message)
-    return response.data
+    return apiCall(apiClient.get<RefreshTokenResponse>('/auth/refresh'))
   },
 
   getCurrentUser: async (): Promise<AuthUser> => {
-    const response = await apiClient.get<AuthUser>('/users/me')
-    if (response.error) throw new Error(response.error.message)
-    return response.data
+    return apiCall(apiClient.get<AuthUser>('/users/me'))
   },
 }

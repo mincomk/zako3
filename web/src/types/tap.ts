@@ -1,3 +1,6 @@
+import type { SortDirection } from './api'
+import type { User } from './user'
+
 export type TapOccupation = 'official' | 'verified' | 'base'
 
 export type TapRole = 'music' | 'tts'
@@ -23,6 +26,12 @@ export interface TapBase {
 export interface Tap extends TapBase {
   permission: TapPermissionConfig
 }
+
+/**
+ * Summary of user information (used in tap owner references)
+ * Derived from the User type to maintain consistency
+ */
+export type UserSummary = Pick<User, 'id' | 'username' | 'avatar'>
 
 export interface TapWithAccess extends Tap {
   hasAccess: boolean
@@ -53,7 +62,7 @@ export interface TapFilters {
 
 export interface TapSort {
   field: 'mostUsed' | 'recentlyCreated' | 'alphabetical'
-  direction: 'asc' | 'desc'
+  direction: SortDirection
 }
 
 export interface CreateTapInput {
@@ -108,10 +117,4 @@ export interface VerificationRequestFull {
   reviewedAt?: string
   reviewedBy?: string
   rejectionReason?: string
-}
-
-export interface UserSummary {
-  id: string
-  username: string
-  avatar: string
 }

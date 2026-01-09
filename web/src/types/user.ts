@@ -1,3 +1,5 @@
+import type { SortDirection } from './api'
+
 export interface User {
   id: string
   discordId: string
@@ -26,7 +28,7 @@ export interface UserFilters {
 
 export interface UserSort {
   field: 'username' | 'createdAt' | 'lastActiveAt' | 'tapCount'
-  direction: 'asc' | 'desc'
+  direction: SortDirection
 }
 
 export interface BanUserInput {

@@ -1,4 +1,5 @@
 import { apiClient, buildQueryString } from '@/lib/api-client'
+import { apiCall } from '@/lib/api-helpers'
 import type {
   PaginatedResponse,
   PaginationParams,
@@ -10,13 +11,16 @@ import type {
   UpdateUserRoleInput,
 } from '@/types'
 
-interface GetUsersParams extends Partial<PaginationParams>, Partial<UserFilters> {
+interface GetUsersParams
+  extends Partial<PaginationParams>, Partial<UserFilters> {
   sortField?: UserSort['field']
   sortDirection?: UserSort['direction']
 }
 
 export const usersApi = {
-  getUsers: async (params: GetUsersParams = {}): Promise<PaginatedResponse<UserWithActivity>> => {
+  getUsers: async (
+    params: GetUsersParams = {}
+  ): Promise<PaginatedResponse<UserWithActivity>> => {
     const query = buildQueryString({
       page: params.page,
       perPage: params.perPage,
@@ -26,43 +30,40 @@ export const usersApi = {
       sortField: params.sortField,
       sortDirection: params.sortDirection,
     })
-    const response = await apiClient.get<PaginatedResponse<UserWithActivity>>(
-      `/admin/users${query}`
+    return apiCall(
+      apiClient.get<PaginatedResponse<UserWithActivity>>(`/admin/users${query}`)
     )
-    if (response.error) throw new Error(response.error.message)
-    return response.data
   },
 
   getUser: async (userId: string): Promise<UserWithActivity> => {
-    const response = await apiClient.get<UserWithActivity>(`/admin/users/${userId}`)
-    if (response.error) throw new Error(response.error.message)
-    return response.data
+    return apiCall(apiClient.get<UserWithActivity>(`/admin/users/${userId}`))
   },
 
   getUserPublic: async (userId: string): Promise<User> => {
-    const response = await apiClient.get<User>(`/users/${userId}`)
-    if (response.error) throw new Error(response.error.message)
-    return response.data
+    return apiCall(apiClient.get<User>(`/users/${userId}`))
   },
 
-  banUser: async (userId: string, data: Omit<BanUserInput, 'userId'>): Promise<UserWithActivity> => {
-    const response = await apiClient.post<UserWithActivity>(`/admin/users/${userId}/ban`, data)
-    if (response.error) throw new Error(response.error.message)
-    return response.data
+  banUser: async (
+    userId: string,
+    data: Omit<BanUserInput, 'userId'>
+  ): Promise<UserWithActivity> => {
+    return apiCall(
+      apiClient.post<UserWithActivity>(`/admin/users/${userId}/ban`, data)
+    )
   },
 
   unbanUser: async (userId: string): Promise<UserWithActivity> => {
-    const response = await apiClient.post<UserWithActivity>(`/admin/users/${userId}/unban`)
-    if (response.error) throw new Error(response.error.message)
-    return response.data
+    return apiCall(
+      apiClient.post<UserWithActivity>(`/admin/users/${userId}/unban`)
+    )
   },
 
   updateUserRole: async (
     userId: string,
     data: Omit<UpdateUserRoleInput, 'userId'>
   ): Promise<UserWithActivity> => {
-    const response = await apiClient.patch<UserWithActivity>(`/admin/users/${userId}/role`, data)
-    if (response.error) throw new Error(response.error.message)
-    return response.data
+    return apiCall(
+      apiClient.patch<UserWithActivity>(`/admin/users/${userId}/role`, data)
+    )
   },
 }

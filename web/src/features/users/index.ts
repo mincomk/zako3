@@ -1,2 +1,10 @@
 export { usersApi } from './api'
-export * from './hooks'
+export {
+  userKeys,
+  useUsers,
+  useUser,
+  useUserPublic,
+  useBanUser,
+  useUnbanUser,
+  useUpdateUserRole,
+} from './hooks'
