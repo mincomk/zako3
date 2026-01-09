@@ -29,6 +29,8 @@ import { serializeScope } from '../entry';
 import type { IPersistenceAdapter } from '../persistence';
 import type { ResolutionContext, ResolvedValue, ISettingsResolver } from '../resolver';
 import { createResolver } from '../resolver';
+import type { ISettingsCache } from '../cache';
+import { createMemoryCache } from '../cache/memory';
 
 // =============================================================================
 // Settings Manager Configuration
@@ -46,6 +48,9 @@ export interface SettingsManagerConfig {
 
   /** Optional: Enable caching (default: false) */
   readonly enableCache?: boolean;
+
+  /** Optional: Custom cache implementation. If not provided and enableCache is true, a memory cache is used. */
+  readonly cache?: ISettingsCache;
 
   /** Optional: Cache TTL in milliseconds (default: 60000) */
   readonly cacheTtlMs?: number;
@@ -191,9 +196,9 @@ export interface ISettingsManager {
   // ===========================================================================
 
   /**
-   * Invalidates the cache for a specific key/scope.
+   * Invalidates the cache for a specific key.
    */
-  invalidateCache(keyIdentifier: KeyIdentifier, scope?: Scope): void;
+  invalidateCache(keyIdentifier: KeyIdentifier): void;
 
   /**
    * Clears the entire cache.
@@ -233,8 +238,13 @@ export function createSettingsManager(config: SettingsManagerConfig): ISettingsM
   const resolver = createResolver(persistence);
   let initialized = false;
 
-  // Simple cache (if enabled)
-  const cache = enableCache ? new Map<string, { value: unknown; expires: number }>() : null;
+  // Cache setup
+  let cache: ISettingsCache | null = null;
+  if (config.cache) {
+    cache = config.cache;
+  } else if (enableCache) {
+    cache = createMemoryCache({ defaultTtlMs: cacheTtlMs });
+  }
 
   /**
    * Resolves a key from identifier or definition.
@@ -251,10 +261,10 @@ export function createSettingsManager(config: SettingsManagerConfig): ISettingsM
   }
 
   /**
-   * Gets the cache key for a resolution.
+   * Gets the cache context key for a resolution.
    */
-  function getCacheKey(keyId: string, context: ResolutionContext): string {
-    return `${keyId}:${JSON.stringify(context)}`;
+  function getCacheContextKey(context: ResolutionContext): string {
+    return JSON.stringify(context);
   }
 
   /**
@@ -356,10 +366,10 @@ export function createSettingsManager(config: SettingsManagerConfig): ISettingsM
 
         // Check cache
         if (cache) {
-          const cacheKey = getCacheKey(keyDef.identifier as string, context);
-          const cached = cache.get(cacheKey);
-          if (cached && cached.expires > Date.now()) {
-            return ok(cached.value as ResolvedValue<T>);
+          const contextKey = getCacheContextKey(context);
+          const cachedValue = await cache.get<T>(keyDef.identifier as string, contextKey);
+          if (cachedValue !== undefined) {
+            return ok(cachedValue);
           }
         }
 
@@ -368,11 +378,8 @@ export function createSettingsManager(config: SettingsManagerConfig): ISettingsM
 
         // Cache result
         if (result.ok && cache) {
-          const cacheKey = getCacheKey(keyDef.identifier as string, context);
-          cache.set(cacheKey, {
-            value: result.value,
-            expires: Date.now() + cacheTtlMs,
-          });
+          const contextKey = getCacheContextKey(context);
+          await cache.set(keyDef.identifier as string, contextKey, result.value);
         }
 
         return result;
@@ -467,12 +474,7 @@ export function createSettingsManager(config: SettingsManagerConfig): ISettingsM
 
         // Invalidate cache
         if (result.ok && cache) {
-          // Invalidate all cache entries for this key
-          for (const cacheKey of Array.from(cache.keys())) {
-            if (cacheKey.startsWith(`${keyDef.identifier}:`)) {
-              cache.delete(cacheKey);
-            }
-          }
+          await cache.invalidate(keyDef.identifier as string);
         }
 
         return result;
@@ -503,11 +505,7 @@ export function createSettingsManager(config: SettingsManagerConfig): ISettingsM
 
         // Invalidate cache
         if (deleted && cache) {
-          for (const cacheKey of Array.from(cache.keys())) {
-            if (cacheKey.startsWith(`${keyDef.identifier}:`)) {
-              cache.delete(cacheKey);
-            }
-          }
+          await cache.invalidate(keyDef.identifier as string);
         }
 
         return ok(deleted);
@@ -535,11 +533,7 @@ export function createSettingsManager(config: SettingsManagerConfig): ISettingsM
 
         // Clear cache for this key
         if (cache) {
-          for (const cacheKey of Array.from(cache.keys())) {
-            if (cacheKey.startsWith(`${keyDef.identifier}:`)) {
-              cache.delete(cacheKey);
-            }
-          }
+          await cache.invalidate(keyDef.identifier as string);
         }
 
         return ok(count);
@@ -552,30 +546,22 @@ export function createSettingsManager(config: SettingsManagerConfig): ISettingsM
     // Cache Operations
     // =========================================================================
 
-    invalidateCache(keyIdentifier: KeyIdentifier, scope?: Scope): void {
+    invalidateCache(keyIdentifier: KeyIdentifier): void {
       if (!cache) return;
 
-      if (scope) {
-        // Invalidate specific scope - we need to check all contexts
-        // that might include this scope
-        for (const cacheKey of Array.from(cache.keys())) {
-          if (cacheKey.startsWith(`${keyIdentifier}:`)) {
-            cache.delete(cacheKey);
-          }
-        }
-      } else {
-        // Invalidate all scopes for this key
-        for (const cacheKey of Array.from(cache.keys())) {
-          if (cacheKey.startsWith(`${keyIdentifier}:`)) {
-            cache.delete(cacheKey);
-          }
-        }
-      }
+      // Note: With the new cache interface, we invalidate by key identifier.
+      // Context-specific invalidation (by scope) is handled by invalidating the whole key
+      // for simplicity and to match the previous behavior's effectiveness.
+      cache.invalidate(keyIdentifier as string).catch(() => {
+        // Log or handle error if needed
+      });
     },
 
     clearCache(): void {
       if (cache) {
-        cache.clear();
+        cache.clear().catch(() => {
+          // Log or handle error if needed
+        });
       }
     },
 
