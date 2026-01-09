@@ -1,3 +1,2 @@
-# TODO
-
-- [ ] Add audio request tracing ID
+- [ ] Implement settings UI `~/projects/zako3/docs/en/settings.md`
+- [ ] Add CI
