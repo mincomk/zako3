@@ -10,20 +10,20 @@ pub struct AudioEngineCommands {
 pub enum AudioEngineSubcommands {
     /// Join a voice channel
     Join {
-        #[arg(help = "The Guild ID")]
-        guild_id: u64,
+        #[arg(short = 'g', long, help = "The Guild ID")]
+        guild_id: Option<String>,
         #[arg(help = "The Channel ID")]
-        channel_id: u64,
+        channel_id: String,
     },
     /// Leave a voice channel
     Leave {
-        #[arg(help = "The Guild ID")]
-        guild_id: u64,
+        #[arg(short = 'g', long, help = "The Guild ID")]
+        guild_id: Option<String>,
     },
     /// Play audio in a voice channel
     Play {
-        #[arg(help = "The Guild ID")]
-        guild_id: u64,
+        #[arg(short = 'g', long, help = "The Guild ID")]
+        guild_id: Option<String>,
         #[arg(long, help = "Queue name", default_value = "default")]
         queue: String,
         #[arg(long, help = "Tap name", default_value = "ytdl")]
@@ -35,8 +35,8 @@ pub enum AudioEngineSubcommands {
     },
     /// Set volume for a specific track
     SetVolume {
-        #[arg(help = "The Guild ID")]
-        guild_id: u64,
+        #[arg(short = 'g', long, help = "The Guild ID")]
+        guild_id: Option<String>,
         #[arg(help = "The Track ID")]
         track_id: u64,
         #[arg(help = "Volume (0.0 - 1.0)")]
@@ -44,15 +44,15 @@ pub enum AudioEngineSubcommands {
     },
     /// Stop playback of a specific track
     Stop {
-        #[arg(help = "The Guild ID")]
-        guild_id: u64,
+        #[arg(short = 'g', long, help = "The Guild ID")]
+        guild_id: Option<String>,
         #[arg(help = "The Track ID")]
         track_id: String,
     },
     /// Stop multiple tracks based on filter
     StopMany {
-        #[arg(help = "The Guild ID")]
-        guild_id: u64,
+        #[arg(short = 'g', long, help = "The Guild ID")]
+        guild_id: Option<String>,
         #[arg(long, help = "Filter type: all, music, tts")]
         filter: String,
         #[arg(long, help = "User ID for TTS filter", required_if_eq("filter", "tts"))]
@@ -60,12 +60,12 @@ pub enum AudioEngineSubcommands {
     },
     /// Skip to the next music track
     NextMusic {
-        #[arg(help = "The Guild ID")]
-        guild_id: u64,
+        #[arg(short = 'g', long, help = "The Guild ID")]
+        guild_id: Option<String>,
     },
     /// Get the current session state
     GetSessionState {
-        #[arg(help = "The Guild ID")]
-        guild_id: u64,
+        #[arg(short = 'g', long, help = "The Guild ID")]
+        guild_id: Option<String>,
     },
 }
