@@ -13,11 +13,60 @@ import type {
   TapStats,
   CreateTapInput,
   UpdateTapInput,
+  TapApiToken,
+  TapApiTokenCreated,
+  CreateTapApiTokenInput,
+  UpdateTapApiTokenInput,
+  TapApiTokenExpiry,
 } from '@/types'
 
 const API_BASE = '/api'
 
 const mockTapsStore = [...allMockTaps]
+
+// API Tokens store
+interface MockApiToken extends TapApiToken {
+  fullToken?: string // Store full token for regeneration display
+}
+
+const mockApiTokensStore: MockApiToken[] = []
+
+// Helper to generate mock tokens
+const generateToken = (): string => {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+  let token = ''
+  for (let i = 0; i < 64; i++) {
+    token += chars.charAt(Math.floor(Math.random() * chars.length))
+  }
+  return `eyJ${token}` // JWT-like format
+}
+
+const maskToken = (token: string): string => {
+  if (token.length <= 18) return token
+  return `${token.slice(0, 12)}••••••••••${token.slice(-6)}`
+}
+
+const calculateExpiry = (expiryType: TapApiTokenExpiry): string | null => {
+  if (expiryType === 'never') return null
+  
+  const now = new Date()
+  switch (expiryType) {
+    case '1_month':
+      now.setMonth(now.getMonth() + 1)
+      break
+    case '3_months':
+      now.setMonth(now.getMonth() + 3)
+      break
+    case '6_months':
+      now.setMonth(now.getMonth() + 6)
+      break
+    case '1_year':
+      now.setFullYear(now.getFullYear() + 1)
+      break
+  }
+  return now.toISOString()
+}
+
 
 const applyFilters = (
   taps: TapWithAccess[],
@@ -315,5 +364,139 @@ export const tapHandlers = [
     const result = paginate(myTaps, page, perPage)
 
     return HttpResponse.json(result)
+  }),
+
+  // API Token endpoints
+  http.get(`${API_BASE}/taps/:tapId/api-tokens`, async ({ params }) => {
+    await delay(150)
+    const { tapId } = params
+
+    const tap = mockTapsStore.find((t) => t.id === tapId)
+    if (!tap) {
+      return HttpResponse.json(
+        { code: 'NOT_FOUND', message: 'Tap not found' },
+        { status: 404 }
+      )
+    }
+
+    const tokens = mockApiTokensStore
+      .filter((t) => t.tapId === tapId)
+      .map(({ fullToken, ...token }) => token) // Remove fullToken from response
+
+    return HttpResponse.json(tokens)
+  }),
+
+  http.post(`${API_BASE}/taps/:tapId/api-tokens`, async ({ params, request }) => {
+    await delay(250)
+    const { tapId } = params
+    const body = (await request.json()) as CreateTapApiTokenInput
+
+    const tap = mockTapsStore.find((t) => t.id === tapId)
+    if (!tap) {
+      return HttpResponse.json(
+        { code: 'NOT_FOUND', message: 'Tap not found' },
+        { status: 404 }
+      )
+    }
+
+    const fullToken = generateToken()
+    const newToken: MockApiToken = {
+      id: `token-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      tapId: tapId as string,
+      label: body.label,
+      token: maskToken(fullToken),
+      fullToken,
+      createdAt: new Date().toISOString(),
+      lastUsedAt: null,
+      expiresAt: calculateExpiry(body.expiry),
+    }
+
+    mockApiTokensStore.push(newToken)
+
+    const response: TapApiTokenCreated = {
+      ...newToken,
+      token: fullToken, // Return full token only on creation
+    }
+    delete (response as any).fullToken
+
+    return HttpResponse.json(response, { status: 201 })
+  }),
+
+  http.patch(`${API_BASE}/taps/:tapId/api-tokens/:tokenId`, async ({ params, request }) => {
+    await delay(200)
+    const { tapId, tokenId } = params
+    const body = (await request.json()) as UpdateTapApiTokenInput
+
+    const tokenIndex = mockApiTokensStore.findIndex(
+      (t) => t.id === tokenId && t.tapId === tapId
+    )
+
+    if (tokenIndex === -1) {
+      return HttpResponse.json(
+        { code: 'NOT_FOUND', message: 'Token not found' },
+        { status: 404 }
+      )
+    }
+
+    mockApiTokensStore[tokenIndex] = {
+      ...mockApiTokensStore[tokenIndex],
+      label: body.label,
+    }
+
+    const { fullToken, ...token } = mockApiTokensStore[tokenIndex]
+    return HttpResponse.json(token)
+  }),
+
+  http.post(`${API_BASE}/taps/:tapId/api-tokens/:tokenId/regenerate`, async ({ params }) => {
+    await delay(250)
+    const { tapId, tokenId } = params
+
+    const tokenIndex = mockApiTokensStore.findIndex(
+      (t) => t.id === tokenId && t.tapId === tapId
+    )
+
+    if (tokenIndex === -1) {
+      return HttpResponse.json(
+        { code: 'NOT_FOUND', message: 'Token not found' },
+        { status: 404 }
+      )
+    }
+
+    const fullToken = generateToken()
+    mockApiTokensStore[tokenIndex] = {
+      ...mockApiTokensStore[tokenIndex],
+      token: maskToken(fullToken),
+      fullToken,
+      createdAt: new Date().toISOString(),
+      lastUsedAt: null,
+    }
+
+    const response: TapApiTokenCreated = {
+      ...mockApiTokensStore[tokenIndex],
+      token: fullToken, // Return full token
+    }
+    delete (response as any).fullToken
+
+    return HttpResponse.json(response)
+  }),
+
+  http.delete(`${API_BASE}/taps/:tapId/api-tokens/:tokenId`, async ({ params }) => {
+    await delay(200)
+    const { tapId, tokenId } = params
+
+    const tokenIndex = mockApiTokensStore.findIndex(
+      (t) => t.id === tokenId && t.tapId === tapId
+    )
+
+    if (tokenIndex === -1) {
+      return HttpResponse.json(
+        { code: 'NOT_FOUND', message: 'Token not found' },
+        { status: 404 }
+      )
+    }
+
+    mockApiTokensStore.splice(tokenIndex, 1)
+
+    return new HttpResponse(null, { status: 204 })
   }),
 ]

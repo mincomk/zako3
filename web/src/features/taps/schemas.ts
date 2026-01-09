@@ -92,7 +92,24 @@ export const verificationRequestSchema = z.object({
   evidence: z.string().optional(),
 })
 
+export const createTapApiTokenSchema = z.object({
+  label: z
+    .string()
+    .min(1, 'Token label is required')
+    .max(64, 'Token label must be at most 64 characters'),
+  expiry: z.enum(['1_month', '3_months', '6_months', '1_year', 'never']),
+})
+
+export const updateTapApiTokenSchema = z.object({
+  label: z
+    .string()
+    .min(1, 'Token label is required')
+    .max(64, 'Token label must be at most 64 characters'),
+})
+
 export type CreateTapInput = z.infer<typeof createTapSchema>
 export type UpdateTapInput = z.infer<typeof updateTapSchema>
 export type ReportTapInput = z.infer<typeof reportTapSchema>
 export type VerificationRequestInput = z.infer<typeof verificationRequestSchema>
+export type CreateTapApiTokenInput = z.infer<typeof createTapApiTokenSchema>
+export type UpdateTapApiTokenInput = z.infer<typeof updateTapApiTokenSchema>

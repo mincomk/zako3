@@ -9,12 +9,16 @@ import type {
   TapSort,
   TapStats,
   TapAuditLogEntry,
+  TapApiToken,
+  TapApiTokenCreated,
 } from '@/types'
 import type {
   CreateTapInput,
   UpdateTapInput,
   ReportTapInput,
   VerificationRequestInput,
+  CreateTapApiTokenInput,
+  UpdateTapApiTokenInput,
 } from './schemas'
 
 interface GetTapsParams extends Partial<PaginationParams>, Partial<TapFilters> {
@@ -97,5 +101,44 @@ export const tapsApi = {
     return apiCall(
       apiClient.get<PaginatedResponse<Tap>>(`/users/me/taps${query}`)
     )
+  },
+
+  // API Token management
+  getTapApiTokens: async (tapId: string): Promise<TapApiToken[]> => {
+    return apiCall(apiClient.get<TapApiToken[]>(`/taps/${tapId}/api-tokens`))
+  },
+
+  createTapApiToken: async (
+    tapId: string,
+    data: CreateTapApiTokenInput
+  ): Promise<TapApiTokenCreated> => {
+    return apiCall(
+      apiClient.post<TapApiTokenCreated>(`/taps/${tapId}/api-tokens`, data)
+    )
+  },
+
+  updateTapApiToken: async (
+    tapId: string,
+    tokenId: string,
+    data: UpdateTapApiTokenInput
+  ): Promise<TapApiToken> => {
+    return apiCall(
+      apiClient.patch<TapApiToken>(`/taps/${tapId}/api-tokens/${tokenId}`, data)
+    )
+  },
+
+  regenerateTapApiToken: async (
+    tapId: string,
+    tokenId: string
+  ): Promise<TapApiTokenCreated> => {
+    return apiCall(
+      apiClient.post<TapApiTokenCreated>(
+        `/taps/${tapId}/api-tokens/${tokenId}/regenerate`
+      )
+    )
+  },
+
+  deleteTapApiToken: async (tapId: string, tokenId: string): Promise<void> => {
+    return apiCall(apiClient.delete(`/taps/${tapId}/api-tokens/${tokenId}`))
   },
 }

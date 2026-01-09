@@ -11,14 +11,24 @@ export {
   useDeleteTap,
   useReportTap,
   useRequestVerification,
+  useTapApiTokens,
+  useCreateTapApiToken,
+  useUpdateTapApiToken,
+  useRegenerateTapApiToken,
+  useDeleteTapApiToken,
 } from './hooks'
 export {
   createTapSchema,
   updateTapSchema,
   reportTapSchema,
   verificationRequestSchema,
+  createTapApiTokenSchema,
+  updateTapApiTokenSchema,
   type CreateTapInput,
   type UpdateTapInput,
   type ReportTapInput,
   type VerificationRequestInput,
+  type CreateTapApiTokenInput,
+  type UpdateTapApiTokenInput,
 } from './schemas'
+

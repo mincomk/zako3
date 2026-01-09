@@ -127,7 +127,7 @@
         "viewEvidence": "증거 보기"
       }
     },
-    "admin.users.status.banned": "차단됨",
+    "admin.users.status.banned": "",
     "auth": {
       "continueWithDiscord": "Discord로 계속하기",
       "loginRequired": "로그인 필요",
@@ -139,6 +139,7 @@
       "actions": "작업",
       "back": "뒤로",
       "cancel": "취소",
+      "close": "",
       "confirm": "확인",
       "copied": "클립보드에 복사되었습니다!",
       "copyToClipboard": "클립보드에 복사",
@@ -284,13 +285,49 @@
         "label": "역할"
       },
       "settings": {
+        "apiAccess": "",
+        "apiAccessDescription": "",
         "basic": "기본 정보",
+        "copied": "",
+        "copy": "",
+        "copyTokenWarning": "",
+        "createToken": "",
+        "createTokenDescription": "",
+        "createTokenSuccess": "",
         "dangerZone": "위험 영역",
+        "deleteToken": "",
+        "deleteTokenConfirm": "",
         "deleteWarning": "탭과 관련된 모든 데이터가 영구적으로 삭제됩니다.",
+        "expiry": {
+          "1_month": "",
+          "1_year": "",
+          "3_months": "",
+          "6_months": "",
+          "never": ""
+        },
+        "noTokens": "",
+        "noTokensDescription": "",
+        "regenerate": "",
+        "regenerateConfirm": "",
+        "regenerateToken": "",
         "rolesAndPermissions": "역할 및 권한",
         "subtitle": "탭 설정 관리",
         "title": "탭 설정",
-        "updateSuccess": "탭이 성공적으로 업데이트되었습니다!"
+        "tokenCopied": "",
+        "tokenCreated": "",
+        "tokenCreatedAt": "",
+        "tokenDeleted": "",
+        "tokenExpired": "",
+        "tokenExpires": "",
+        "tokenExpiry": "",
+        "tokenLabel": "",
+        "tokenLabelPlaceholder": "",
+        "tokenLastUsed": "",
+        "tokenNeverExpires": "",
+        "tokenNeverUsed": "",
+        "tokenRegenerated": "",
+        "updateSuccess": "탭이 성공적으로 업데이트되었습니다!",
+        "yourNewToken": ""
       },
       "sort": {
         "alphabetical": "가나다순",

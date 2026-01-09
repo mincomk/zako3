@@ -118,3 +118,33 @@ export interface VerificationRequestFull {
   reviewedBy?: string
   rejectionReason?: string
 }
+
+export type TapApiTokenExpiry =
+  | '1_month'
+  | '3_months'
+  | '6_months'
+  | '1_year'
+  | 'never'
+
+export interface TapApiToken {
+  id: string
+  tapId: string
+  label: string
+  token: string // Masked (e.g., "zako_tap_••••••••••abc123")
+  createdAt: string
+  lastUsedAt: string | null
+  expiresAt: string | null
+}
+
+export interface CreateTapApiTokenInput {
+  label: string
+  expiry: TapApiTokenExpiry
+}
+
+export interface UpdateTapApiTokenInput {
+  label: string
+}
+
+export interface TapApiTokenCreated extends Omit<TapApiToken, 'token'> {
+  token: string // Full token (only returned once on creation)
+}

@@ -16,7 +16,8 @@
     "test:coverage": "vitest run --coverage",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "extract-i18n": "i18next-cli extract --sync-all"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

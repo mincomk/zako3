@@ -5,7 +5,14 @@ import {
 } from '@tanstack/react-query'
 import { tapsApi } from './api'
 import type { TapFilters, TapSort, PaginationParams } from '@/types'
-import type { CreateTapInput, UpdateTapInput, ReportTapInput, VerificationRequestInput } from './schemas'
+import type {
+  CreateTapInput,
+  UpdateTapInput,
+  ReportTapInput,
+  VerificationRequestInput,
+  CreateTapApiTokenInput,
+  UpdateTapApiTokenInput,
+} from './schemas'
 
 export const tapKeys = {
   all: ['taps'] as const,
@@ -16,6 +23,7 @@ export const tapKeys = {
   stats: (id: string) => [...tapKeys.detail(id), 'stats'] as const,
   auditLog: (id: string) => [...tapKeys.detail(id), 'audit-log'] as const,
   myTaps: () => [...tapKeys.all, 'my-taps'] as const,
+  apiTokens: (id: string) => [...tapKeys.detail(id), 'api-tokens'] as const,
 }
 
 interface UseTapsParams extends Partial<PaginationParams>, Partial<TapFilters> {
@@ -114,6 +122,63 @@ export const useRequestVerification = () => {
       tapsApi.requestVerification(tapId, data),
     onSuccess: (_, { tapId }) => {
       queryClient.invalidateQueries({ queryKey: tapKeys.detail(tapId) })
+    },
+  })
+}
+
+// API Token hooks
+export const useTapApiTokens = (tapId: string | undefined) => {
+  return useQuery({
+    queryKey: tapKeys.apiTokens(tapId!),
+    queryFn: () => tapsApi.getTapApiTokens(tapId!),
+    enabled: !!tapId,
+  })
+}
+
+export const useCreateTapApiToken = (tapId: string) => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (data: CreateTapApiTokenInput) =>
+      tapsApi.createTapApiToken(tapId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: tapKeys.apiTokens(tapId) })
+    },
+  })
+}
+
+export const useUpdateTapApiToken = (tapId: string) => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ tokenId, data }: { tokenId: string; data: UpdateTapApiTokenInput }) =>
+      tapsApi.updateTapApiToken(tapId, tokenId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: tapKeys.apiTokens(tapId) })
+    },
+  })
+}
+
+export const useRegenerateTapApiToken = (tapId: string) => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (tokenId: string) =>
+      tapsApi.regenerateTapApiToken(tapId, tokenId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: tapKeys.apiTokens(tapId) })
+    },
+  })
+}
+
+export const useDeleteTapApiToken = (tapId: string) => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (tokenId: string) =>
+      tapsApi.deleteTapApiToken(tapId, tokenId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: tapKeys.apiTokens(tapId) })
     },
   })
 }
