@@ -19,7 +19,10 @@ const API_BASE = '/api'
 
 const mockTapsStore = [...allMockTaps]
 
-const applyFilters = (taps: TapWithAccess[], filters: TapFilters): TapWithAccess[] => {
+const applyFilters = (
+  taps: TapWithAccess[],
+  filters: TapFilters
+): TapWithAccess[] => {
   let result = [...taps]
 
   if (filters.search) {
@@ -105,7 +108,9 @@ export const tapHandlers = [
     const perPage = parseInt(url.searchParams.get('perPage') || '20')
     const search = url.searchParams.get('search') || undefined
     const rolesParam = url.searchParams.get('roles')
-    const roles = rolesParam ? (rolesParam.split(',') as TapFilters['roles']) : undefined
+    const roles = rolesParam
+      ? (rolesParam.split(',') as TapFilters['roles'])
+      : undefined
     const accessible =
       url.searchParams.get('accessible') === 'true'
         ? true
@@ -114,12 +119,21 @@ export const tapHandlers = [
           : undefined
     const ownerId = url.searchParams.get('ownerId') || undefined
     const sortField =
-      (url.searchParams.get('sortField') as TapSort['field']) || 'recentlyCreated'
+      (url.searchParams.get('sortField') as TapSort['field']) ||
+      'recentlyCreated'
     const sortDirection =
       (url.searchParams.get('sortDirection') as TapSort['direction']) || 'desc'
 
-    let filtered = applyFilters(mockTapsStore, { search, roles, accessible, ownerId })
-    filtered = applySort(filtered, { field: sortField, direction: sortDirection })
+    let filtered = applyFilters(mockTapsStore, {
+      search,
+      roles,
+      accessible,
+      ownerId,
+    })
+    filtered = applySort(filtered, {
+      field: sortField,
+      direction: sortDirection,
+    })
     const result = paginate(filtered, page, perPage)
 
     return HttpResponse.json(result)

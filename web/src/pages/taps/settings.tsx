@@ -2,9 +2,9 @@ import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useTranslation } from 'react-i18next'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, Link } from 'react-router-dom'
 import { toast } from 'sonner'
-import { AlertTriangle } from 'lucide-react'
+import { AlertTriangle, Activity } from 'lucide-react'
 import { updateTapSchema, type UpdateTapInput } from '@/features/taps/schemas'
 import { useTap, useUpdateTap, useDeleteTap } from '@/features/taps'
 import { TAP_PERMISSIONS, TAP_ROLES, ROUTES } from '@/lib/constants'
@@ -37,6 +37,7 @@ import {
 import { Checkbox } from '@/components/ui/checkbox'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ConfirmDialog } from '@/components/common'
+import { UserListSelector } from '@/components/tap/user-list-selector'
 import type { TapRole } from '@/types'
 
 export const TapSettingsPage = () => {
@@ -116,9 +117,17 @@ export const TapSettingsPage = () => {
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">{t('taps.settings.title')}</h1>
-        <p className="text-muted-foreground">{t('taps.settings.subtitle')}</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold">{t('taps.settings.title')}</h1>
+          <p className="text-muted-foreground">{t('taps.settings.subtitle')}</p>
+        </div>
+        <Button asChild variant="outline">
+          <Link to={ROUTES.TAP_STATS(tapId!)}>
+            <Activity className="mr-2 h-4 w-4" />
+            {t('taps.stats.title')}
+          </Link>
+        </Button>
       </div>
 
       <Form {...form}>
@@ -244,7 +253,34 @@ export const TapSettingsPage = () => {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>{t('taps.form.permission')}</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <Select
+                      onValueChange={(value) => {
+                        if (value === 'owner_only') {
+                          field.onChange({ type: 'owner_only' })
+                        } else if (value === 'public') {
+                          field.onChange({ type: 'public' })
+                        } else if (value === 'whitelisted') {
+                          const currentUserIds =
+                            field.value?.type === 'whitelisted'
+                              ? field.value.userIds
+                              : []
+                          field.onChange({
+                            type: 'whitelisted',
+                            userIds: currentUserIds,
+                          })
+                        } else if (value === 'blacklisted') {
+                          const currentUserIds =
+                            field.value?.type === 'blacklisted'
+                              ? field.value.userIds
+                              : []
+                          field.onChange({
+                            type: 'blacklisted',
+                            userIds: currentUserIds,
+                          })
+                        }
+                      }}
+                      value={field.value?.type}
+                    >
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue />
@@ -262,6 +298,56 @@ export const TapSettingsPage = () => {
                   </FormItem>
                 )}
               />
+
+              {form.watch('permission')?.type === 'whitelisted' && (
+                <FormField
+                  control={form.control}
+                  name="permission"
+                  render={({ field }) => (
+                    <FormItem>
+                      <UserListSelector
+                        value={
+                          field.value && field.value.type === 'whitelisted'
+                            ? field.value.userIds
+                            : []
+                        }
+                        onChange={(userIds) =>
+                          field.onChange({ type: 'whitelisted', userIds })
+                        }
+                        label={t('taps.form.whitelistedUsers')}
+                        placeholder={t('taps.form.addWhitelistedUsers')}
+                        description={t('taps.form.whitelistedUsersHelp')}
+                      />
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+
+              {form.watch('permission')?.type === 'blacklisted' && (
+                <FormField
+                  control={form.control}
+                  name="permission"
+                  render={({ field }) => (
+                    <FormItem>
+                      <UserListSelector
+                        value={
+                          field.value && field.value.type === 'blacklisted'
+                            ? field.value.userIds
+                            : []
+                        }
+                        onChange={(userIds) =>
+                          field.onChange({ type: 'blacklisted', userIds })
+                        }
+                        label={t('taps.form.blacklistedUsers')}
+                        placeholder={t('taps.form.addBlacklistedUsers')}
+                        description={t('taps.form.blacklistedUsersHelp')}
+                      />
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
             </CardContent>
           </Card>
 

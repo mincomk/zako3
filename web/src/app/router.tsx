@@ -17,7 +17,9 @@ import {
   AdminTapsPage,
   AdminTapDetailPage,
   AdminNotificationsPage,
+  AdminVerificationsPage,
 } from '@/pages'
+import { HotkeyTest } from '@/pages/hotkey-test'
 import { ROUTES } from '@/lib/constants'
 
 export const AppRouter = () => {
@@ -37,6 +39,12 @@ export const AppRouter = () => {
         </Route>
         <Route path={ROUTES.AUTH_CALLBACK} element={<AuthCallbackPage />} />
 
+        {/* Public app routes */}
+        <Route element={<AppLayout />}>
+          <Route path={ROUTES.TAPS} element={<TapExplorePage />} />
+          <Route path="/taps/:tapId/stats" element={<TapStatsPage />} />
+        </Route>
+
         {/* App routes (authenticated) */}
         <Route
           element={
@@ -47,11 +55,9 @@ export const AppRouter = () => {
         >
           <Route path={ROUTES.DASHBOARD} element={<DashboardPage />} />
           <Route path={ROUTES.SETTINGS} element={<SettingsPage />} />
-          <Route path={ROUTES.TAPS} element={<TapExplorePage />} />
           <Route path={ROUTES.TAPS_MINE} element={<MyTapsPage />} />
           <Route path={ROUTES.TAPS_CREATE} element={<CreateTapPage />} />
           <Route path="/taps/:tapId/settings" element={<TapSettingsPage />} />
-          <Route path="/taps/:tapId/stats" element={<TapStatsPage />} />
         </Route>
 
         {/* Admin routes */}
@@ -74,9 +80,14 @@ export const AppRouter = () => {
             path={ROUTES.ADMIN_NOTIFICATIONS}
             element={<AdminNotificationsPage />}
           />
+          <Route
+            path={ROUTES.ADMIN_VERIFICATIONS}
+            element={<AdminVerificationsPage />}
+          />
         </Route>
 
         {/* Redirects */}
+        <Route path="/hotkey-test" element={<HotkeyTest />} />
         <Route
           path={ROUTES.HOME}
           element={<Navigate to={ROUTES.DASHBOARD} replace />}

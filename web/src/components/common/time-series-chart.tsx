@@ -49,11 +49,11 @@ export const TimeSeriesChart = ({
             <XAxis
               dataKey="time"
               className="text-xs"
-              tick={{ fill: 'hsl(var(--muted-foreground))' }}
+              tick={{ fill: 'var(--color-foreground)' }}
             />
             <YAxis
               className="text-xs"
-              tick={{ fill: 'hsl(var(--muted-foreground))' }}
+              tick={{ fill: 'var(--color-foreground)' }}
               tickFormatter={valueFormatter}
             />
             <Tooltip

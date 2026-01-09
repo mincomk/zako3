@@ -1,10 +1,10 @@
 import { Badge } from '@/components/ui/badge'
 import { Lock, Globe, Users, Ban } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import type { TapPermission } from '@/types'
+import type { TapPermissionConfig } from '@/types'
 
 interface PermissionBadgeProps {
-  permission: TapPermission
+  permission: TapPermissionConfig
   hasAccess?: boolean
 }
 
@@ -21,12 +21,12 @@ export const PermissionBadge = ({
     blacklisted: { icon: Ban, variant: 'destructive' as const },
   }
 
-  const { icon: Icon, variant } = config[permission]
+  const { icon: Icon, variant } = config[permission.type]
 
   return (
     <Badge variant={variant} className="gap-1">
       <Icon className="h-3 w-3" />
-      {t(`taps.permissions.${permission}`)}
+      {t(`taps.permissions.${permission.type}`)}
       {hasAccess !== undefined && (
         <span className="ml-1">{hasAccess ? '✓' : '✗'}</span>
       )}

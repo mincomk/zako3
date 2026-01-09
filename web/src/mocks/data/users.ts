@@ -44,7 +44,7 @@ export const mockCurrentUser = createUser({
 })
 
 export const mockAdminUser = createUser({
-    id: 'admin-user-id',
+    id: 'current-user-id',
     username: 'AdminUser',
     email: 'admin@zako.ac',
     isAdmin: true,

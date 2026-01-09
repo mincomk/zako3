@@ -9,6 +9,7 @@ interface TapListProps {
   isLoading?: boolean
   onReport: (tapId: string) => void
   onTapClick?: (tapId: string) => void
+  onSettingsClick?: (tapId: string) => void
   emptyMessage?: string
   emptyDescription?: string
 }
@@ -18,6 +19,7 @@ export const TapList = ({
   isLoading,
   onReport,
   onTapClick,
+  onSettingsClick,
   emptyMessage,
   emptyDescription,
 }: TapListProps) => {
@@ -45,6 +47,7 @@ export const TapList = ({
           tap={tap}
           onReport={onReport}
           onClick={onTapClick}
+          onSettingsClick={onSettingsClick}
         />
       ))}
     </div>

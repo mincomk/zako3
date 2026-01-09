@@ -1,0 +1,2 @@
+- [ ] Implement settings UI `~/projects/zako3/docs/en/settings.md`
+- [ ] Add custom context menu

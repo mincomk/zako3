@@ -25,12 +25,15 @@ export const NOTIFICATION_LEVELS = [
 
 export const TAP_ROLES = ['music', 'tts'] as const
 
-export const TAP_PERMISSIONS = [
+export const TAP_PERMISSION_TYPES = [
   'owner_only',
   'public',
   'whitelisted',
   'blacklisted',
 ] as const
+
+// Deprecated: Use TAP_PERMISSION_TYPES instead
+export const TAP_PERMISSIONS = TAP_PERMISSION_TYPES
 
 export const TAP_OCCUPATIONS = ['official', 'verified', 'base'] as const
 
@@ -51,4 +54,5 @@ export const ROUTES = {
   ADMIN_TAPS: '/admin/taps',
   ADMIN_TAP: (tapId: string) => `/admin/taps/${tapId}`,
   ADMIN_NOTIFICATIONS: '/admin/notifications',
+  ADMIN_VERIFICATIONS: '/admin/verifications',
 } as const

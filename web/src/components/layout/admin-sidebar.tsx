@@ -11,9 +11,11 @@ import {
     ChevronRight,
     ExternalLink,
     ArrowLeft,
+    ShieldCheck,
 } from 'lucide-react'
 import { ROUTES } from '@/lib/constants'
 import { useLogout, useAuthStore } from '@/features/auth'
+import { useVerificationRequests } from '@/features/admin'
 import {
     Sidebar,
     SidebarContent,
@@ -31,6 +33,7 @@ import {
     useSidebar,
 } from '@/components/ui/sidebar'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Badge } from '@/components/ui/badge'
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -51,6 +54,7 @@ interface NavItem {
     icon: React.ComponentType<{ className?: string }>
     external?: boolean
     items?: { title: string; url: string }[]
+    badge?: number
 }
 
 export const AdminSidebar = () => {
@@ -59,6 +63,13 @@ export const AdminSidebar = () => {
     const { user } = useAuthStore()
     const { mutate: logout } = useLogout()
     const { state } = useSidebar()
+
+    // Get pending verifications count
+    const { data: verificationsData } = useVerificationRequests({
+        status: 'pending',
+        perPage: 1,
+    })
+    const pendingCount = verificationsData?.meta?.total ?? 0
 
     const adminNavItems: NavItem[] = [
         {
@@ -75,6 +86,12 @@ export const AdminSidebar = () => {
             title: t('nav.taps'),
             url: ROUTES.ADMIN_TAPS,
             icon: Compass,
+        },
+        {
+            title: t('admin.verifications.sidebarTitle'),
+            url: ROUTES.ADMIN_VERIFICATIONS,
+            icon: ShieldCheck,
+            badge: pendingCount,
         },
         {
             title: t('nav.notifications'),
@@ -173,6 +190,11 @@ export const AdminSidebar = () => {
                     <Link to={item.url}>
                         <item.icon className="h-4 w-4" />
                         <span>{item.title}</span>
+                        {item.badge !== undefined && item.badge > 0 && (
+                            <Badge variant="secondary" className="ml-auto h-5 px-1.5 text-xs">
+                                {item.badge}
+                            </Badge>
+                        )}
                     </Link>
                 </SidebarMenuButton>
             </SidebarMenuItem>
@@ -189,7 +211,10 @@ export const AdminSidebar = () => {
                             className="flex items-center gap-2 px-2 py-1"
                         >
                             <img
-                                className={clsx('rounded-lg', state === 'expanded' ? 'h-8 w-8' : 'h-4 w-4')}
+                                className={clsx(
+                                    'rounded-lg',
+                                    state === 'expanded' ? 'h-8 w-8' : 'h-4 w-4'
+                                )}
                                 alt="ZAKO"
                                 src={zakoLogo}
                             />

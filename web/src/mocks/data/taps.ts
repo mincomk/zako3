@@ -4,7 +4,7 @@ import type {
   TapWithAccess,
   TapOccupation,
   TapRole,
-  TapPermission,
+  TapPermissionConfig,
   TapStats,
   TimeSeriesPoint,
   UserSummary,
@@ -12,14 +12,16 @@ import type {
 
 const TAP_OCCUPATIONS: TapOccupation[] = ['official', 'verified', 'base']
 const TAP_ROLES: TapRole[] = ['music', 'tts']
-const TAP_PERMISSIONS: TapPermission[] = [
+const TAP_PERMISSION_TYPES = [
   'owner_only',
   'public',
   'whitelisted',
   'blacklisted',
-]
+] as const
 
-export const createUserSummary = (overrides?: Partial<UserSummary>): UserSummary => ({
+export const createUserSummary = (
+  overrides?: Partial<UserSummary>
+): UserSummary => ({
   id: faker.string.uuid(),
   username: faker.internet.username(),
   avatar: faker.image.avatar(),
@@ -30,8 +32,35 @@ export const createTap = (overrides?: Partial<Tap>): Tap => {
   const createdAt = faker.date.past({ years: 1 })
   const updatedAt = faker.date.between({ from: createdAt, to: new Date() })
 
+  // Generate permission config
+  const permissionType =
+    overrides?.permission?.type ||
+    faker.helpers.arrayElement(TAP_PERMISSION_TYPES)
+
+  let permission: TapPermissionConfig
+  if (permissionType === 'owner_only') {
+    permission = { type: 'owner_only' }
+  } else if (permissionType === 'public') {
+    permission = { type: 'public' }
+  } else if (permissionType === 'whitelisted') {
+    const userIds = Array.from(
+      { length: faker.number.int({ min: 1, max: 10 }) },
+      () => faker.string.uuid()
+    )
+    permission = { type: 'whitelisted', userIds }
+  } else {
+    const userIds = Array.from(
+      { length: faker.number.int({ min: 1, max: 5 }) },
+      () => faker.string.uuid()
+    )
+    permission = { type: 'blacklisted', userIds }
+  }
+
   return {
-    id: faker.internet.username().toLowerCase().replace(/[^a-z0-9_.]/g, '_'),
+    id: faker.internet
+      .username()
+      .toLowerCase()
+      .replace(/[^a-z0-9_.]/g, '_'),
     name: faker.commerce.productName(),
     description: faker.lorem.paragraph(),
     createdAt: createdAt.toISOString(),
@@ -39,7 +68,7 @@ export const createTap = (overrides?: Partial<Tap>): Tap => {
     ownerId: faker.string.uuid(),
     occupation: faker.helpers.arrayElement(TAP_OCCUPATIONS),
     roles: faker.helpers.arrayElements(TAP_ROLES, { min: 1, max: 2 }),
-    permission: faker.helpers.arrayElement(TAP_PERMISSIONS),
+    permission,
     totalUses: faker.number.int({ min: 0, max: 10000 }),
     ...overrides,
   }
@@ -54,7 +83,8 @@ export const createTapWithAccess = (
   return {
     ...tap,
     hasAccess:
-      tap.permission === 'public' || faker.datatype.boolean({ probability: 0.7 }),
+      tap.permission.type === 'public' ||
+      faker.datatype.boolean({ probability: 0.7 }),
     owner,
     ...overrides,
   }
@@ -102,8 +132,13 @@ export const mockOfficialTaps: TapWithAccess[] = Array.from({ length: 5 }, () =>
   createTapWithAccess({ occupation: 'official' })
 )
 
-export const mockVerifiedTaps: TapWithAccess[] = Array.from({ length: 10 }, () =>
-  createTapWithAccess({ occupation: 'verified' })
+export const mockVerifiedTaps: TapWithAccess[] = Array.from(
+  { length: 10 },
+  () => createTapWithAccess({ occupation: 'verified' })
 )
 
-export const allMockTaps = [...mockOfficialTaps, ...mockVerifiedTaps, ...mockTaps]
+export const allMockTaps = [
+  ...mockOfficialTaps,
+  ...mockVerifiedTaps,
+  ...mockTaps,
+]

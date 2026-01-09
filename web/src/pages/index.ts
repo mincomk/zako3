@@ -15,4 +15,5 @@ export {
   AdminTapsPage,
   AdminTapDetailPage,
   AdminNotificationsPage,
+  AdminVerificationsPage,
 } from './admin'

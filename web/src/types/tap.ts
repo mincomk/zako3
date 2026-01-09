@@ -2,9 +2,13 @@ export type TapOccupation = 'official' | 'verified' | 'base'
 
 export type TapRole = 'music' | 'tts'
 
-export type TapPermission = 'owner_only' | 'public' | 'whitelisted' | 'blacklisted'
+export type TapPermissionConfig =
+  | { type: 'owner_only' }
+  | { type: 'public' }
+  | { type: 'whitelisted'; userIds: string[] }
+  | { type: 'blacklisted'; userIds: string[] }
 
-export interface Tap {
+export interface TapBase {
   id: string
   name: string
   description: string
@@ -13,8 +17,11 @@ export interface Tap {
   ownerId: string
   occupation: TapOccupation
   roles: TapRole[]
-  permission: TapPermission
   totalUses: number
+}
+
+export interface Tap extends TapBase {
+  permission: TapPermissionConfig
 }
 
 export interface TapWithAccess extends Tap {
@@ -54,7 +61,7 @@ export interface CreateTapInput {
   name: string
   description: string
   roles: TapRole[]
-  permission: TapPermission
+  permission: TapPermissionConfig
 }
 
 export interface UpdateTapInput {
@@ -62,7 +69,7 @@ export interface UpdateTapInput {
   name?: string
   description?: string
   roles?: TapRole[]
-  permission?: TapPermission
+  permission?: TapPermissionConfig
 }
 
 export interface TapNotificationSettings {
@@ -86,6 +93,21 @@ export interface TapVerificationRequest {
   tapId: string
   reason: string
   evidence?: string
+}
+
+export type VerificationStatus = 'pending' | 'approved' | 'rejected'
+
+export interface VerificationRequestFull {
+  id: string
+  tapId: string
+  tap: TapWithAccess
+  reason: string
+  evidence?: string
+  status: VerificationStatus
+  requestedAt: string
+  reviewedAt?: string
+  reviewedBy?: string
+  rejectionReason?: string
 }
 
 export interface UserSummary {
