@@ -8,6 +8,7 @@ use tokio::sync::mpsc::Sender as TokioSender;
 use crate::{
     PCMSender,
     constant::BUFFER_SIZE,
+    frame_duration,
     types::{BoxConsumer, TrackId},
 };
 
@@ -27,6 +28,8 @@ struct ManagedSource {
 }
 
 fn mixer_thread(cmd_rx: Receiver<MixerCommand>, output: PCMSender) {
+    let instant = std::time::Instant::now();
+
     let mut sources: Vec<ManagedSource> = Vec::new();
 
     loop {
@@ -83,6 +86,12 @@ fn mixer_thread(cmd_rx: Receiver<MixerCommand>, output: PCMSender) {
         if let Err(e) = output.blocking_send(mixed_buffer) {
             tracing::warn!("Mixer output send error: {}", e);
             break;
+        }
+
+        let elapsed = instant.elapsed();
+        let frame_dur = frame_duration();
+        if elapsed < frame_dur {
+            std::thread::sleep(frame_dur - elapsed);
         }
     }
 }

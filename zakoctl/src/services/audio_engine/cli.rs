@@ -9,6 +9,7 @@ pub struct AudioEngineCommands {
 #[derive(Subcommand)]
 pub enum AudioEngineSubcommands {
     /// Join a voice channel
+    #[command(name = "join", alias = "j")]
     Join {
         #[arg(short = 'g', long, help = "The Guild ID")]
         guild_id: Option<String>,
@@ -16,11 +17,13 @@ pub enum AudioEngineSubcommands {
         channel_id: String,
     },
     /// Leave a voice channel
+    #[command(name = "leave", alias = "l")]
     Leave {
         #[arg(short = 'g', long, help = "The Guild ID")]
         guild_id: Option<String>,
     },
     /// Play audio in a voice channel
+    #[command(name = "play", alias = "p")]
     Play {
         #[arg(short = 'g', long, help = "The Guild ID")]
         guild_id: Option<String>,
@@ -34,6 +37,7 @@ pub enum AudioEngineSubcommands {
         volume: f32,
     },
     /// Set volume for a specific track
+    #[command(name = "set-volume", alias = "sv")]
     SetVolume {
         #[arg(short = 'g', long, help = "The Guild ID")]
         guild_id: Option<String>,
@@ -50,10 +54,11 @@ pub enum AudioEngineSubcommands {
         track_id: String,
     },
     /// Stop multiple tracks based on filter
+    #[command(name = "stop-many", alias = "sm")]
     StopMany {
         #[arg(short = 'g', long, help = "The Guild ID")]
         guild_id: Option<String>,
-        #[arg(long, help = "Filter type: all, music, tts")]
+        #[arg(long, help = "Filter type: all, music, tts", default_value = "all")]
         filter: String,
         #[arg(long, help = "User ID for TTS filter", required_if_eq("filter", "tts"))]
         user_id: Option<u64>,
@@ -64,6 +69,7 @@ pub enum AudioEngineSubcommands {
         guild_id: Option<String>,
     },
     /// Get the current session state
+    #[command(name = "get-session-state", alias = "gss")]
     GetSessionState {
         #[arg(short = 'g', long, help = "The Guild ID")]
         guild_id: Option<String>,

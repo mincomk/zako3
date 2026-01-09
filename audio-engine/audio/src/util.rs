@@ -36,8 +36,3 @@ where
 
     Ok(reader)
 }
-
-pub fn frame_duration(sample_rate: u32, frame_size: usize) -> std::time::Duration {
-    let secs = frame_size as f64 / sample_rate as f64;
-    std::time::Duration::from_secs_f64(secs)
-}
