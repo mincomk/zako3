@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["audio-engine/audio","audio-engine/controller","audio-engine/core", "audio-engine/infra", "audio-engine/protos", "audio-engine/telemetry", "audio-engine/types", "taphub", "zakoctl"]
+members = ["audio-engine/audio","audio-engine/controller","audio-engine/core", "audio-engine/infra", "audio-engine/protos", "audio-engine/telemetry", "audio-engine/types", "emoji-matcher", "taphub", "zakoctl"]
 
 [workspace.dependencies]
 zako3-audio-engine-types = { path = "audio-engine/types" }
