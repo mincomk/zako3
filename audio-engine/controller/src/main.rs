@@ -21,9 +21,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = config.addr();
 
     let telem_config = TelemetryConfig {
-        service_name: "audio-engine".into(),
-        otlp_endpoint: None,
-        metrics_port: 9090,
+        service_name: config.service_name.clone(),
+        otlp_endpoint: config.otlp_endpoint.clone(),
+        metrics_port: config.metrics_port,
     };
 
     let telemetry = zako3_audio_engine_telemetry::init(telem_config).await?;

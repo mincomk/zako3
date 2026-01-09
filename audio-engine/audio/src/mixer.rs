@@ -8,7 +8,7 @@ use tokio::sync::mpsc::Sender as TokioSender;
 use crate::{
     PCMSender,
     constant::BUFFER_SIZE,
-    frame_duration,
+    frame_duration, metrics,
     types::{BoxConsumer, TrackId},
 };
 
@@ -28,14 +28,15 @@ struct ManagedSource {
 }
 
 fn mixer_thread(cmd_rx: Receiver<MixerCommand>, output: PCMSender) {
-    let instant = std::time::Instant::now();
-
     let mut sources: Vec<ManagedSource> = Vec::new();
 
     loop {
+        let loop_start = std::time::Instant::now();
+
         while let Ok(cmd) = cmd_rx.try_recv() {
             match cmd {
                 MixerCommand::AddSource(track_id, consumer, end_tx) => {
+                    tracing::debug!(track_id = %track_id, "Adding source to mixer");
                     sources.push(ManagedSource {
                         track_id,
                         consumer,
@@ -43,9 +44,15 @@ fn mixer_thread(cmd_rx: Receiver<MixerCommand>, output: PCMSender) {
                         current_volume: 1.0,
                         target_volume: 1.0,
                     });
+                    metrics::inc_mixer_active_sources();
                 }
                 MixerCommand::RemoveSource(track_id) => {
+                    let prev_len = sources.len();
                     sources.retain(|s| s.track_id != track_id);
+                    if sources.len() < prev_len {
+                        tracing::debug!(track_id = %track_id, "Removed source from mixer");
+                        metrics::dec_mixer_active_sources();
+                    }
                 }
                 MixerCommand::SetVolume(track_id, volume) => {
                     if let Some(source) = sources.iter_mut().find(|s| s.track_id == track_id) {
@@ -65,33 +72,49 @@ fn mixer_thread(cmd_rx: Receiver<MixerCommand>, output: PCMSender) {
         }
 
         let mut mixed_buffer = [0f32; BUFFER_SIZE];
+        let mut ended_sources: Vec<TrackId> = Vec::new();
 
         for source in sources.iter_mut() {
             match source.consumer.try_recv() {
                 Ok(slice) => {
                     for i in 0..BUFFER_SIZE {
-                        // Simple linear volume ramp
                         source.current_volume +=
                             (source.target_volume - source.current_volume) * 0.01;
                         mixed_buffer[i] += slice[i] * source.current_volume;
                     }
                 }
                 Err(TryRecvError::Disconnected) => {
+                    ended_sources.push(source.track_id);
                     let _ = source.end_tx.try_send(source.track_id);
                 }
-                Err(TryRecvError::Empty) => {}
+                Err(TryRecvError::Empty) => {
+                    metrics::record_mixer_underrun();
+                }
             }
         }
 
+        for track_id in ended_sources {
+            sources.retain(|s| s.track_id != track_id);
+            metrics::dec_mixer_active_sources();
+        }
+
         if let Err(e) = output.blocking_send(mixed_buffer) {
-            tracing::warn!("Mixer output send error: {}", e);
+            tracing::error!(error = %e, "Mixer output send failed, terminating mixer thread");
             break;
         }
 
-        let elapsed = instant.elapsed();
+        let processing_duration = loop_start.elapsed();
+        metrics::record_mixer_processing_duration(processing_duration.as_secs_f64());
+
         let frame_dur = frame_duration();
-        if elapsed < frame_dur {
-            std::thread::sleep(frame_dur - elapsed);
+        if processing_duration < frame_dur {
+            std::thread::sleep(frame_dur - processing_duration);
+        } else {
+            tracing::warn!(
+                duration_ms = processing_duration.as_millis(),
+                budget_ms = frame_dur.as_millis(),
+                "Mixer loop exceeded time budget"
+            );
         }
     }
 }
@@ -140,7 +163,6 @@ impl Mixer for ThreadMixer {
     async fn has_source(&self, track_id: TrackId) -> bool {
         let (resp_tx, resp_rx) = tokio::sync::oneshot::channel();
         let _ = self.cmd_tx.send(MixerCommand::HasSource(track_id, resp_tx));
-        // timeout
         match tokio::time::timeout(std::time::Duration::from_secs(2), resp_rx).await {
             Ok(Ok(has_source)) => has_source,
             _ => false,

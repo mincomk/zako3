@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
 use dashmap::DashMap;
-use zako3_audio_engine_audio::{create_async_pcm_pair, create_stream_input};
+use tracing::instrument;
+use zako3_audio_engine_audio::{create_async_pcm_pair, create_stream_input, metrics};
 
 use crate::{
     ArcDiscordService, ArcStateService, ArcTapHubService,
@@ -33,7 +34,10 @@ impl SessionManager {
         }
     }
 
+    #[instrument(skip(self), fields(guild_id = %guild_id))]
     async fn initiate_session(&self, guild_id: GuildId) -> ZakoResult<()> {
+        tracing::debug!("Initiating audio session");
+
         let (prod, cons) = create_async_pcm_pair();
 
         let mixer = create_thread_mixer(prod);
@@ -53,10 +57,16 @@ impl SessionManager {
 
         self.sessions.insert(guild_id, control);
 
+        metrics::inc_session_active();
+        tracing::info!("Audio session initiated");
+
         Ok(())
     }
 
+    #[instrument(skip(self), fields(guild_id = %guild_id, channel_id = %channel_id))]
     pub async fn join(&self, guild_id: GuildId, channel_id: ChannelId) -> ZakoResult<()> {
+        tracing::info!("Joining voice channel");
+
         self.discord_service
             .join_voice_channel(guild_id, channel_id)
             .await?;
@@ -74,11 +84,17 @@ impl SessionManager {
         Ok(())
     }
 
+    #[instrument(skip(self), fields(guild_id = %guild_id))]
     pub async fn leave(&self, guild_id: GuildId) -> ZakoResult<()> {
+        tracing::info!("Leaving voice channel");
+
         self.discord_service.leave_voice_channel(guild_id).await?;
         self.state_service.delete_session(guild_id).await?;
 
-        self.sessions.remove(&guild_id);
+        if self.sessions.remove(&guild_id).is_some() {
+            metrics::dec_session_active();
+            tracing::info!("Audio session terminated");
+        }
 
         Ok(())
     }
