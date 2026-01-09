@@ -1,0 +1,230 @@
+{
+  "translation": {
+    "admin": {
+      "actions": {
+        "manageTaps": "Manage Taps",
+        "openGrafana": "Open Grafana",
+        "review": "Review",
+        "viewNotifications": "View Notifications"
+      },
+      "dashboard": "Dashboard",
+      "dashboardSubtitle": "Here's an overview of the system.",
+      "noRecentActivity": "No recent activity.",
+      "overview": "Overview",
+      "pendingVerifications": "Pending Verifications",
+      "quickActions": "Quick Actions",
+      "recentActivity": "Recent Activity",
+      "stats": {
+        "allSystemsOperational": "All systems operational",
+        "pendingReports": "Pending reports",
+        "pendingVerifications": "Pending Verifications",
+        "requiresAttention": "Requires attention",
+        "requiresReview": "Requires review",
+        "systemHealth": "System Health",
+        "totalTaps": "Total Taps",
+        "totalUsers": "Total Users"
+      },
+      "taps": {
+        "approveVerification": "Approve Verification",
+        "rejectVerification": "Reject Verification",
+        "subtitle": "Manage all taps in the system",
+        "tapDetails": "Tap Details",
+        "title": "Taps",
+        "verificationPending": "Pending Verification"
+      },
+      "notifications": {
+        "category": "Category",
+        "deleteSuccess": "Notification deleted successfully.",
+        "level": "Level",
+        "markAllRead": "Mark All as Read",
+        "markAllReadSuccess": "All notifications marked as read.",
+        "markReadSuccess": "Notification marked as read.",
+        "noNotifications": "No notifications found.",
+        "readStatus": "Read Status",
+        "subtitle": "Manage system notifications",
+        "title": "Notifications"
+      },
+      "users": {
+        "ban": "Ban",
+        "banConfirmDescription": "Are you sure you want to ban this user? They will not be able to log in.",
+        "banConfirmTitle": "Confirm Ban",
+        "banSuccess": "User has been banned.",
+        "email": "Email",
+        "grantedAdminRole": "Granted admin role.",
+        "lastActive": "Last Active",
+        "makeAdmin": "Make Admin",
+        "noUsers": "No users found.",
+        "removeAdmin": "Remove Admin",
+        "removedAdminRole": "Removed admin role.",
+        "role": "Role",
+        "searchPlaceholder": "Search users...",
+        "status": "Status",
+        "subtitle": "Manage all users in the system.",
+        "title": "Users",
+        "unban": "Unban",
+        "unbanConfirmDescription": "Are you sure you want to unban this user?",
+        "unbanConfirmTitle": "Confirm Unban",
+        "unbanSuccess": "User has been unbanned.",
+        "user": "User"
+      }
+    },
+    "auth": {
+      "continueWithDiscord": "Continue with Discord",
+      "redirectAfterLogin": "Redirecting you now...",
+      "signInDescription": "Sign in to continue to the dashboard.",
+      "welcome": "Welcome"
+    },
+    "common": {
+      "cancel": "Cancel",
+      "confirm": "Confirm",
+      "copied": "Copied to clipboard!",
+      "copyToClipboard": "Copy to clipboard",
+      "delete": "Delete",
+      "loading": "Loading...",
+      "role": "Role",
+      "search": "Search",
+      "viewAll": "View All"
+    },
+    "dashboard": {
+      "myTaps": "My Taps",
+      "noTapsYet": "You haven't created any Taps yet.",
+      "recentActivity": "Recent Activity",
+      "recentTaps": "Recent Taps",
+      "stats": {
+        "acrossTaps": "Across all taps",
+        "activeUsers": "Active Users",
+        "last24h": "Last 24 hours",
+        "lastMonth": "Last month",
+        "myTaps": "My Taps",
+        "tapsOwned": "Taps Owned",
+        "totalUses": "Total Uses",
+        "uptime": "Uptime"
+      },
+      "subtitle": "Welcome to your dashboard.",
+      "welcome": "Welcome, {{name}}!"
+    },
+    "nav": {
+      "admin": "Admin",
+      "adminPanel": "Admin Panel",
+      "backToApp": "Back to App",
+      "createTap": "Create Tap",
+      "dashboard": "Dashboard",
+      "explore": "Explore",
+      "logout": "Logout",
+      "myTaps": "My Taps",
+      "notifications": "Notifications",
+      "settings": "Settings",
+      "taps": "Taps",
+      "users": "Users"
+    },
+    "notifications": {
+      "noNotifications": "No new notifications.",
+      "title": "Notifications"
+    },
+    "taps": {
+      "create": "Create Tap",
+      "createFirst": "Create your first Tap",
+      "createFirstDescription": "Get started by creating a new Tap.",
+      "createSuccess": "Tap created successfully!",
+      "deleteConfirmDescription": "Are you sure you want to delete this Tap? This cannot be undone.",
+      "deleteConfirmTitle": "Delete Tap",
+      "deleteSuccess": "Tap deleted successfully.",
+      "explore": "Explore Taps",
+      "exploreDescription": "Find and use Taps created by the community.",
+      "filters": {
+        "accessible": "Accessible",
+        "byRole": "By Role"
+      },
+      "form": {
+        "description": "Description",
+        "descriptionPlaceholder": "Describe what this tap does...",
+        "id": "Tap ID",
+        "idHelp": "Lowercase letters, numbers, underscores, and periods only",
+        "idPlaceholder": "my_awesome_tap",
+        "idWarning": "Changing the ID will change the tap's URL. Use with caution.",
+        "name": "Name",
+        "namePlaceholder": "My Awesome Tap",
+        "permission": "Permission",
+        "roles": "Roles",
+        "rolesHelp": "Select at least one role"
+      },
+      "myTaps": "My Taps",
+      "myTapsDescription": "Taps you own or have access to.",
+      "noDescription": "No description provided.",
+      "noTaps": "No Taps found.",
+      "noTapsOwned": "You do not own any Taps.",
+      "occupations": {
+        "base": "Base",
+        "official": "Official",
+        "verified": "Verified"
+      },
+      "permissions": {
+        "blacklisted": "Blacklisted",
+        "owner_only": "Owner Only",
+        "public": "Public",
+        "whitelisted": "Whitelisted"
+      },
+      "report": {
+        "description": "Why are you reporting this Tap?",
+        "reason": "Reason",
+        "submit": "Submit Report",
+        "success": "Report submitted successfully.",
+        "title": "Report Tap"
+      },
+      "roleLabels": {
+        "music": "Music",
+        "tts": "Text-to-Speech"
+      },
+      "settings": {
+        "basic": "Basic Information",
+        "dangerZone": "Danger Zone",
+        "deleteWarning": "This will permanently delete the tap and all associated data.",
+        "notificationSettings": "Notification Settings",
+        "rolesAndPermissions": "Roles & Permissions",
+        "subtitle": "Manage your tap settings",
+        "title": "Tap Settings",
+        "updateSuccess": "Tap updated successfully!",
+        "verification": "Verification",
+        "verificationRequest": "Request Verified Status",
+        "verificationRequestSuccess": "Verification request submitted!"
+      },
+      "sort": {
+        "alphabetical": "Alphabetical",
+        "mostUsed": "Most Used",
+        "recentlyCreated": "Recently Created"
+      },
+      "stats": {
+        "activeNow": "Active Now",
+        "auditLog": "Audit Log",
+        "cacheHitRate": "Cache Hit Rate",
+        "cacheHits": "Cache Hits",
+        "noAuditLogs": "No audit logs found.",
+        "subtitle": "View statistics and activity for your tap",
+        "title": "Tap Statistics",
+        "uniqueUsers": "Unique Users",
+        "useRate": "Use Rate"
+      }
+    },
+    "settings": {
+      "account": "Account",
+      "accountSubtitle": "Manage your account settings",
+      "appearance": "Appearance",
+      "appearanceSubtitle": "Customize the look and feel",
+      "darkMode": "Dark Mode",
+      "deleteAccount": "Delete Account",
+      "deleteAccountWarning": "This will permanently delete your account and all associated data.",
+      "language": "Language",
+      "notifications": "Notifications",
+      "notificationsCheckBackLater": "Notification settings coming soon. Check back later!",
+      "darkModeSubtitle": "Toggle dark mode on or off",
+      "languageSubtitle": "Select your preferred language",
+      "notificationsSubtitle": "Manage how you receive notifications",
+      "preferences": "Preferences",
+      "preferencesSubtitle": "Customize your experience",
+      "profile": "Profile",
+      "profileSubtitle": "Your personal information",
+      "subtitle": "Manage your account settings and preferences",
+      "title": "Settings"
+    }
+  }
+}

@@ -1,0 +1,230 @@
+{
+  "translation": {
+    "admin": {
+      "actions": {
+        "manageTaps": "탭 관리",
+        "openGrafana": "Grafana 열기",
+        "review": "검토",
+        "viewNotifications": "알림 보기"
+      },
+      "dashboard": "대시보드",
+      "dashboardSubtitle": "시스템 개요입니다.",
+      "noRecentActivity": "최근 활동이 없습니다.",
+      "overview": "개요",
+      "pendingVerifications": "보류 중인 인증",
+      "quickActions": "빠른 작업",
+      "recentActivity": "최근 활동",
+      "stats": {
+        "allSystemsOperational": "모든 시스템 정상 작동",
+        "pendingReports": "보류 중인 신고",
+        "pendingVerifications": "보류 중인 인증",
+        "requiresAttention": "주의 필요",
+        "requiresReview": "검토 필요",
+        "systemHealth": "시스템 상태",
+        "totalTaps": "총 탭",
+        "totalUsers": "총 사용자"
+      },
+      "taps": {
+        "approveVerification": "인증 승인",
+        "rejectVerification": "인증 거부",
+        "subtitle": "시스템의 모든 탭 관리",
+        "tapDetails": "탭 상세정보",
+        "title": "탭",
+        "verificationPending": "인증 대기 중"
+      },
+      "notifications": {
+        "category": "카테고리",
+        "deleteSuccess": "알림이 성공적으로 삭제되었습니다.",
+        "level": "수준",
+        "markAllRead": "모두 읽음으로 표시",
+        "markAllReadSuccess": "모든 알림이 읽음으로 표시되었습니다.",
+        "markReadSuccess": "알림이 읽음으로 표시되었습니다.",
+        "noNotifications": "알림을 찾을 수 없습니다.",
+        "readStatus": "읽음 상태",
+        "subtitle": "시스템 알림 관리",
+        "title": "알림"
+      },
+      "users": {
+        "ban": "차단",
+        "banConfirmDescription": "이 사용자를 차단하시겠습니까? 로그인할 수 없게 됩니다.",
+        "banConfirmTitle": "차단 확인",
+        "banSuccess": "사용자가 차단되었습니다.",
+        "email": "이메일",
+        "grantedAdminRole": "관리자 역할이 부여되었습니다.",
+        "lastActive": "마지막 활동",
+        "makeAdmin": "관리자로 지정",
+        "noUsers": "사용자를 찾을 수 없습니다.",
+        "removeAdmin": "관리자 제거",
+        "removedAdminRole": "관리자 역할이 제거되었습니다.",
+        "role": "역할",
+        "searchPlaceholder": "사용자 검색...",
+        "status": "상태",
+        "subtitle": "시스템의 모든 사용자를 관리합니다.",
+        "title": "사용자",
+        "unban": "차단 해제",
+        "unbanConfirmDescription": "이 사용자를 차단 해제하시겠습니까?",
+        "unbanConfirmTitle": "차단 해제 확인",
+        "unbanSuccess": "사용자 차단이 해제되었습니다.",
+        "user": "사용자"
+      }
+    },
+    "auth": {
+      "continueWithDiscord": "Discord로 계속하기",
+      "redirectAfterLogin": "지금 리디렉션합니다...",
+      "signInDescription": "대시보드로 계속하려면 로그인하세요.",
+      "welcome": "환영합니다"
+    },
+    "common": {
+      "cancel": "취소",
+      "confirm": "확인",
+      "copied": "클립보드에 복사되었습니다!",
+      "copyToClipboard": "클립보드에 복사",
+      "delete": "삭제",
+      "loading": "로딩 중...",
+      "role": "역할",
+      "search": "검색",
+      "viewAll": "모두 보기"
+    },
+    "dashboard": {
+      "myTaps": "내 탭",
+      "noTapsYet": "아직 탭을 만들지 않았습니다.",
+      "recentActivity": "최근 활동",
+      "recentTaps": "최근 탭",
+      "stats": {
+        "acrossTaps": "모든 탭에서",
+        "activeUsers": "활성 사용자",
+        "last24h": "지난 24시간",
+        "lastMonth": "지난 달",
+        "myTaps": "내 탭",
+        "tapsOwned": "소유한 탭",
+        "totalUses": "총 사용량",
+        "uptime": "가동 시간"
+      },
+      "subtitle": "대시보드에 오신 것을 환영합니다.",
+      "welcome": "{{name}}님, 환영합니다!"
+    },
+    "nav": {
+      "admin": "관리자",
+      "adminPanel": "관리자 패널",
+      "backToApp": "앱으로 돌아가기",
+      "createTap": "탭 생성",
+      "dashboard": "대시보드",
+      "explore": "탐색",
+      "logout": "로그아웃",
+      "myTaps": "내 탭",
+      "notifications": "알림",
+      "settings": "설정",
+      "taps": "탭",
+      "users": "사용자"
+    },
+    "notifications": {
+      "noNotifications": "새 알림이 없습니다.",
+      "title": "알림"
+    },
+    "taps": {
+      "create": "탭 만들기",
+      "createFirst": "첫 번째 탭 만들기",
+      "createFirstDescription": "새 탭을 만들어 시작하세요.",
+      "createSuccess": "탭이 성공적으로 생성되었습니다!",
+      "deleteConfirmDescription": "이 탭을 삭제하시겠습니까? 이 작업은 취소할 수 없습니다.",
+      "deleteConfirmTitle": "탭 삭제",
+      "deleteSuccess": "탭이 성공적으로 삭제되었습니다.",
+      "explore": "탭 탐색",
+      "exploreDescription": "커뮤니티에서 만든 탭을 찾아 사용하세요.",
+      "filters": {
+        "accessible": "접근 가능",
+        "byRole": "역할별"
+      },
+      "form": {
+        "description": "설명",
+        "descriptionPlaceholder": "이 탭이 하는 일을 설명하세요...",
+        "id": "탭 ID",
+        "idHelp": "소문자, 숫자, 밑줄, 마침표만 사용 가능",
+        "idPlaceholder": "my_awesome_tap",
+        "idWarning": "ID를 변경하면 탭의 URL이 변경됩니다. 주의해서 사용하세요.",
+        "name": "이름",
+        "namePlaceholder": "나의 멋진 탭",
+        "permission": "권한",
+        "roles": "역할",
+        "rolesHelp": "최소 하나의 역할을 선택하세요"
+      },
+      "myTaps": "내 탭",
+      "myTapsDescription": "내가 소유하거나 접근할 수 있는 탭입니다.",
+      "noDescription": "설명이 제공되지 않았습니다.",
+      "noTaps": "탭을 찾을 수 없습니다.",
+      "noTapsOwned": "소유한 탭이 없습니다.",
+      "occupations": {
+        "base": "기본",
+        "official": "공식",
+        "verified": "인증됨"
+      },
+      "permissions": {
+        "blacklisted": "블랙리스트",
+        "owner_only": "소유자만",
+        "public": "공개",
+        "whitelisted": "화이트리스트"
+      },
+      "report": {
+        "description": "이 탭을 신고하는 이유는 무엇입니까?",
+        "reason": "이유",
+        "submit": "보고서 제출",
+        "success": "보고서가 성공적으로 제출되었습니다.",
+        "title": "탭 신고"
+      },
+      "roleLabels": {
+        "music": "음악",
+        "tts": "텍스트 음성 변환"
+      },
+      "settings": {
+        "basic": "기본 정보",
+        "dangerZone": "위험 영역",
+        "deleteWarning": "탭과 관련된 모든 데이터가 영구적으로 삭제됩니다.",
+        "notificationSettings": "알림 설정",
+        "rolesAndPermissions": "역할 및 권한",
+        "subtitle": "탭 설정 관리",
+        "title": "탭 설정",
+        "updateSuccess": "탭이 성공적으로 업데이트되었습니다!",
+        "verification": "인증",
+        "verificationRequest": "인증 상태 요청",
+        "verificationRequestSuccess": "인증 요청이 제출되었습니다!"
+      },
+      "sort": {
+        "alphabetical": "가나다순",
+        "mostUsed": "가장 많이 사용됨",
+        "recentlyCreated": "최근 생성됨"
+      },
+      "stats": {
+        "activeNow": "현재 활성",
+        "auditLog": "감사 로그",
+        "cacheHitRate": "캐시 적중률",
+        "cacheHits": "캐시 적중",
+        "noAuditLogs": "감사 로그를 찾을 수 없습니다.",
+        "subtitle": "탭의 통계 및 활동 보기",
+        "title": "탭 통계",
+        "uniqueUsers": "고유 사용자",
+        "useRate": "사용률"
+      }
+    },
+    "settings": {
+      "account": "계정",
+      "accountSubtitle": "계정 설정 관리",
+      "appearance": "외관",
+      "appearanceSubtitle": "모양과 느낌을 사용자 정의",
+      "darkMode": "다크 모드",
+      "deleteAccount": "계정 삭제",
+      "deleteAccountWarning": "계정과 관련된 모든 데이터가 영구적으로 삭제됩니다.",
+      "darkModeSubtitle": "다크 모드 전환",
+      "languageSubtitle": "대시보드 언어 선택",
+      "language": "언어",
+      "notifications": "알림",
+      "notificationsSubtitle": "알림 수신 방법 관리",
+      "notificationsCheckBackLater": "알림 설정은 곧 제공됩니다. 나중에 다시 확인하세요!",
+      "preferences": "환경설정",
+      "preferencesSubtitle": "경험 사용자 정의",
+      "profile": "프로필",
+      "profileSubtitle": "개인 정보",
+      "subtitle": "계정 설정 및 환경설정 관리",
+      "title": "설정"
+    }
+  }
+}
