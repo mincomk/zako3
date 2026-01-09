@@ -2,6 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use tokio::sync::mpsc::Sender;
 use tracing::instrument;
+use zako3_audio_engine_types::SessionState;
 
 use crate::{
     ArcStateService, ArcTapHubService,
@@ -179,6 +180,11 @@ impl SessionControl {
         self.reconcile().await?;
 
         Ok(())
+    }
+
+    #[instrument(skip(self))]
+    pub async fn session_state(&self) -> ZakoResult<Option<SessionState>> {
+        self.state_service.get_session(self.guild_id).await
     }
 
     /// Reconcile the session state with the mixer state
