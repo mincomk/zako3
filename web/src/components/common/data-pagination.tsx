@@ -14,7 +14,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { PAGE_SIZE_OPTIONS } from '@/lib/constants'
-import type { PaginationMeta } from '@/types'
+import type { PaginationMeta } from '@zako-ac/zako3-data'
 
 interface DataPaginationProps {
   meta: PaginationMeta

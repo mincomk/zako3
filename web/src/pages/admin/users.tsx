@@ -25,7 +25,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Skeleton } from '@/components/ui/skeleton'
-import type { User } from '@/types'
+import type { User } from '@zako-ac/zako3-data'
 
 export const AdminUsersPage = () => {
   const { t, i18n } = useTranslation()

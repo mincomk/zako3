@@ -5,7 +5,7 @@ import type {
   Notification,
   NotificationFilters,
   NotificationSort,
-} from '@/types'
+} from '@zako-ac/zako3-data'
 
 const API_BASE = '/api'
 

@@ -15,7 +15,7 @@ import { Badge } from '@/components/ui/badge'
 import { useNotifications, useUnreadCount, useMarkAsRead } from '@/features/notifications'
 import { formatRelativeTime } from '@/lib/date'
 import { cn } from '@/lib/utils'
-import type { NotificationLevel } from '@/types'
+import type { NotificationLevel } from '@zako-ac/zako3-data'
 
 const levelColors: Record<NotificationLevel, string> = {
   info: 'bg-info text-info-foreground',

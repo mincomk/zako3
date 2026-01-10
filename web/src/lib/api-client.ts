@@ -1,4 +1,4 @@
-import type { ApiError, ApiResponse } from '@/types'
+import type { ApiError, ApiResponse } from '@zako-ac/zako3-data'
 import { API_BASE_URL, AUTH_TOKEN_KEY } from './constants'
 
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'

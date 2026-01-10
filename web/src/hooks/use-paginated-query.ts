@@ -1,6 +1,6 @@
 import { useQuery, type UseQueryOptions } from '@tanstack/react-query'
 import { usePagination } from './use-pagination'
-import type { PaginatedResponse, PaginationParams } from '@/types'
+import type { PaginatedResponse, PaginationParams } from '@zako-ac/zako3-data'
 
 /**
  * Options for the usePaginatedQuery hook

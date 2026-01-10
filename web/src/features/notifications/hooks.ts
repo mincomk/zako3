@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { notificationsApi } from './api'
-import type { NotificationFilters, NotificationSort, PaginationParams } from '@/types'
+import type { NotificationFilters, NotificationSort, PaginationParams } from '@zako-ac/zako3-data'
 
 export const notificationKeys = {
   all: ['notifications'] as const,

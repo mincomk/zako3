@@ -9,7 +9,7 @@ import type {
   UserSort,
   BanUserInput,
   UpdateUserRoleInput,
-} from '@/types'
+} from '@zako-ac/zako3-data'
 
 interface GetUsersParams
   extends Partial<PaginationParams>, Partial<UserFilters> {

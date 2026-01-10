@@ -32,6 +32,7 @@
     "@opentelemetry/resources": "^2.3.0",
     "@opentelemetry/sdk-node": "^0.209.0",
     "@opentelemetry/semantic-conventions": "^1.38.0",
+    "@zako-ac/zako3-data": "workspace:*",
     "discord.js": "^14.25.1",
     "drizzle-orm": "^0.45.1",
     "fastify": "^5.6.2",

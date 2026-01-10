@@ -4,7 +4,7 @@ import { formatRelativeTime } from '@/lib/date'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
-import type { NotificationLevel } from '@/types'
+import type { NotificationLevel } from '@zako-ac/zako3-data'
 
 export interface ActivityItem {
   id: string

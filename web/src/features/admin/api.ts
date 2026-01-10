@@ -7,7 +7,7 @@ import type {
   Tap,
   VerificationRequestFull,
   VerificationStatus,
-} from '@/types'
+} from '@zako-ac/zako3-data'
 
 interface GetVerificationRequestsParams extends Partial<PaginationParams> {
   status?: VerificationStatus

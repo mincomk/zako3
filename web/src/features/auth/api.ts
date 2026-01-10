@@ -5,7 +5,7 @@ import type {
   LoginResponse,
   AuthCallbackResponse,
   RefreshTokenResponse,
-} from '@/types'
+} from '@zako-ac/zako3-data'
 
 export const authApi = {
   getLoginUrl: async (): Promise<LoginResponse> => {

@@ -5,7 +5,7 @@ import type {
     NotificationLevel,
     AuditLogEntry,
     TapAuditLogEntry,
-} from '@/types'
+} from '@zako-ac/zako3-data'
 
 const NOTIFICATION_LEVELS: NotificationLevel[] = ['info', 'success', 'warning', 'error']
 

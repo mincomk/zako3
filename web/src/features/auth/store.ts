@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { AuthUser, AuthState } from '@/types'
+import type { AuthUser, AuthState } from '@zako-ac/zako3-data'
 import { AUTH_TOKEN_KEY, AUTH_USER_KEY } from '@/lib/constants'
 
 interface AuthStore extends AuthState {

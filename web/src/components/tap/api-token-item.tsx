@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ConfirmDialog } from '@/components/common'
 import { useClipboard } from '@/hooks/use-clipboard'
-import type { TapApiToken } from '@/types'
+import type { TapApiToken } from '@zako-ac/zako3-data'
 
 interface ApiTokenItemProps {
     token: TapApiToken

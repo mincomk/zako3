@@ -1,6 +1,6 @@
 import { http, HttpResponse, delay } from 'msw'
 import { mockCurrentUser, mockAdminUser } from '../data/users'
-import type { AuthUser, LoginResponse, AuthCallbackResponse } from '@/types'
+import type { AuthUser, LoginResponse, AuthCallbackResponse } from '@zako-ac/zako3-data'
 
 const API_BASE = '/api'
 

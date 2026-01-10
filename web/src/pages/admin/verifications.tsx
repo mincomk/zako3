@@ -40,7 +40,7 @@ import { Label } from '@/components/ui/label'
 import { ConfirmDialog, DataPagination } from '@/components/common'
 import { formatRelativeTime } from '@/lib/date'
 import { ROUTES } from '@/lib/constants'
-import type { VerificationRequestFull, VerificationStatus } from '@/types'
+import type { VerificationRequestFull, VerificationStatus } from '@zako-ac/zako3-data'
 
 export const AdminVerificationsPage = () => {
   const { t, i18n } = useTranslation()

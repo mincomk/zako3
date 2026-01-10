@@ -3,7 +3,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
-import { createTapSchema, type CreateTapInput } from '@/features/taps/schemas'
+import { createTapSchema, type CreateTapInput } from '@zako-ac/zako3-data'
 import { useCreateTap } from '@/features/taps'
 import { TAP_PERMISSIONS, TAP_ROLES, ROUTES } from '@/lib/constants'
 import { Button } from '@/components/ui/button'
@@ -34,7 +34,7 @@ import {
 } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
 import { UserListSelector } from '@/components/tap/user-list-selector'
-import type { TapRole } from '@/types'
+import type { TapRole } from '@zako-ac/zako3-data'
 
 export const CreateTapPage = () => {
     const { t } = useTranslation()

@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next'
 import { SearchInput, FilterDropdown, SortDropdown } from '@/components/common'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
-import type { TapSort, TapRole } from '@/types'
+import type { TapSort, TapRole } from '@zako-ac/zako3-data'
 
 export interface TapFiltersProps {
     search: string

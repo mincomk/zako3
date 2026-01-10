@@ -1,4 +1,4 @@
-import type { ApiResponse } from '@/types'
+import type { ApiResponse } from '@zako-ac/zako3-data'
 
 /**
  * Unwraps an API response and throws an error if the response contains one.

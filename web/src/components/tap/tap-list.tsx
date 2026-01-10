@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next'
 import { Compass } from 'lucide-react'
 import { TapCard } from './tap-card'
 import { EmptyState, LoadingSkeleton } from '@/components/common'
-import type { TapWithAccess } from '@/types'
+import type { TapWithAccess } from '@zako-ac/zako3-data'
 
 interface TapListProps {
   taps: TapWithAccess[]

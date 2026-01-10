@@ -7,7 +7,7 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import type { SortDirection } from '@/types'
+import type { SortDirection } from '@zako-ac/zako3-data'
 
 export interface SortOption<T extends string = string> {
   value: T

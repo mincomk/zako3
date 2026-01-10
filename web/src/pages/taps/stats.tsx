@@ -26,7 +26,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ROUTES } from '@/lib/constants'
 import { formatRelativeTime } from '@/lib/date'
-import { TapAuditLogEntry } from '@/types'
+import { TapAuditLogEntry } from '@zako-ac/zako3-data'
 
 export const TapStatsPage = () => {
     const { t, i18n } = useTranslation()

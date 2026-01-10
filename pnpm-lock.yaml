@@ -32,6 +32,9 @@ importers:
       '@opentelemetry/semantic-conventions':
         specifier: ^1.38.0
         version: 1.38.0
+      '@zako-ac/zako3-data':
+        specifier: workspace:*
+        version: link:../packages/zako3-data
       discord.js:
         specifier: ^14.25.1
         version: 14.25.1
@@ -176,6 +179,31 @@ importers:
         specifier: ^5.9.3
         version: 5.9.3
 
+  packages/zako3-data:
+    dependencies:
+      zod:
+        specifier: ^4.3.5
+        version: 4.3.5
+    devDependencies:
+      '@size-limit/preset-small-lib':
+        specifier: ^12.0.0
+        version: 12.0.0(size-limit@12.0.0(jiti@2.6.1))
+      husky:
+        specifier: ^9.1.7
+        version: 9.1.7
+      size-limit:
+        specifier: ^12.0.0
+        version: 12.0.0(jiti@2.6.1)
+      tsdx:
+        specifier: ^2.0.0
+        version: 2.0.0
+      tslib:
+        specifier: ^2.8.1
+        version: 2.8.1
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+
   packages/zako3-settings:
     devDependencies:
       '@size-limit/preset-small-lib':
@@ -292,6 +320,9 @@ importers:
       '@tanstack/react-query-devtools':
         specifier: ^5.91.2
         version: 5.91.2(@tanstack/react-query@5.90.16(react@19.2.3))(react@19.2.3)
+      '@zako-ac/zako3-data':
+        specifier: file:../packages/zako3-data
+        version: link:../packages/zako3-data
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1

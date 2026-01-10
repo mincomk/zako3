@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { adminApi } from './api'
-import type { PaginationParams, VerificationStatus } from '@/types'
+import type { PaginationParams, VerificationStatus } from '@zako-ac/zako3-data'
 
 interface GetVerificationRequestsParams extends Partial<PaginationParams> {
   status?: VerificationStatus

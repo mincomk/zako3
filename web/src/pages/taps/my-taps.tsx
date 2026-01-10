@@ -14,7 +14,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { usePagination } from '@/hooks'
 import { ROUTES } from '@/lib/constants'
-import type { Tap, TapWithAccess } from '@/types'
+import type { Tap, TapWithAccess } from '@zako-ac/zako3-data'
 
 export const MyTapsPage = () => {
   const { t } = useTranslation()

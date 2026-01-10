@@ -11,7 +11,7 @@ import type {
   TapAuditLogEntry,
   TapApiToken,
   TapApiTokenCreated,
-} from '@/types'
+} from '@zako-ac/zako3-data'
 import type {
   CreateTapInput,
   UpdateTapInput,
@@ -19,7 +19,7 @@ import type {
   VerificationRequestInput,
   CreateTapApiTokenInput,
   UpdateTapApiTokenInput,
-} from './schemas'
+} from '@zako-ac/zako3-data'
 
 interface GetTapsParams extends Partial<PaginationParams>, Partial<TapFilters> {
   sortField?: TapSort['field']

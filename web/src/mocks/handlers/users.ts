@@ -7,7 +7,7 @@ import type {
   UserSort,
   BanUserInput,
   UpdateUserRoleInput,
-} from '@/types'
+} from '@zako-ac/zako3-data'
 
 const API_BASE = '/api'
 

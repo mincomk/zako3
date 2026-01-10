@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import { AlertTriangle, Activity, Key } from 'lucide-react'
-import { updateTapSchema, type UpdateTapInput } from '@/features/taps/schemas'
+import { updateTapSchema, type UpdateTapInput } from '@zako-ac/zako3-data'
 import {
   useTap,
   useUpdateTap,
@@ -48,7 +48,7 @@ import { ConfirmDialog } from '@/components/common'
 import { UserListSelector } from '@/components/tap/user-list-selector'
 import { ApiTokenItem } from '@/components/tap/api-token-item'
 import { CreateApiTokenDialog } from '@/components/tap/create-api-token-dialog'
-import type { TapRole } from '@/types'
+import type { TapRole } from '@zako-ac/zako3-data'
 
 export const TapSettingsPage = () => {
   const { t } = useTranslation()

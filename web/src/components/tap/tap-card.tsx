@@ -21,7 +21,7 @@ import {
 import { formatRelativeTime } from '@/lib/date'
 import { useClipboard } from '@/hooks'
 import { cn } from '@/lib/utils'
-import type { TapWithAccess, TapOccupation, TapRole } from '@/types'
+import type { TapWithAccess, TapOccupation, TapRole } from '@zako-ac/zako3-data'
 import { PermissionBadge } from './permission-badge'
 
 const occupationVariants: Record<

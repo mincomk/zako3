@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { usersApi } from './api'
-import type { UserFilters, UserSort, PaginationParams, BanUserInput, UpdateUserRoleInput } from '@/types'
+import type { UserFilters, UserSort, PaginationParams, BanUserInput, UpdateUserRoleInput } from '@zako-ac/zako3-data'
 
 export const userKeys = {
     all: ['users'] as const,

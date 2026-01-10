@@ -30,7 +30,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { useClipboard } from '@/hooks/use-clipboard'
-import { createTapApiTokenSchema, type CreateTapApiTokenInput } from '@/features/taps/schemas'
+import { createTapApiTokenSchema, type CreateTapApiTokenInput } from '@zako-ac/zako3-data'
 
 interface CreateApiTokenDialogProps {
   open: boolean

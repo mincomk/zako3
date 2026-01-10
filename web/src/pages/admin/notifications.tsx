@@ -28,7 +28,7 @@ import {
 } from '@/components/ui/table'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
-import type { NotificationLevel } from '@/types'
+import type { NotificationLevel } from '@zako-ac/zako3-data'
 
 const levelColors: Record<
   NotificationLevel,

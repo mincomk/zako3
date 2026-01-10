@@ -1,7 +1,7 @@
 import { Badge } from '@/components/ui/badge'
 import { Lock, Globe, Users, Ban } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import type { TapPermissionConfig } from '@/types'
+import type { TapPermissionConfig } from '@zako-ac/zako3-data'
 
 interface PermissionBadgeProps {
   permission: TapPermissionConfig

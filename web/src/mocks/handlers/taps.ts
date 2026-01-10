@@ -18,7 +18,7 @@ import type {
   CreateTapApiTokenInput,
   UpdateTapApiTokenInput,
   TapApiTokenExpiry,
-} from '@/types'
+} from '@zako-ac/zako3-data'
 
 const API_BASE = '/api'
 

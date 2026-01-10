@@ -1,7 +1,7 @@
 import { Badge } from '@/components/ui/badge'
 import { Crown, CheckCircle } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import type { TapOccupation } from '@/types'
+import type { TapOccupation } from '@zako-ac/zako3-data'
 
 interface OccupationBadgeProps {
   occupation: TapOccupation

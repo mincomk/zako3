@@ -1,5 +1,5 @@
 import { faker } from '@faker-js/faker'
-import type { User, UserWithActivity } from '@/types'
+import type { User, UserWithActivity } from '@zako-ac/zako3-data'
 
 export const createUser = (overrides?: Partial<User>): User => {
     const createdAt = faker.date.past({ years: 2 })

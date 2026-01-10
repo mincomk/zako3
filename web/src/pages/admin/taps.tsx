@@ -10,7 +10,7 @@ import { ReportModal } from '@/components/tap/report-modal'
 import { DataPagination } from '@/components/common'
 import { usePagination } from '@/hooks'
 import { ROUTES } from '@/lib/constants'
-import type { TapRole, TapSort, TapWithAccess } from '@/types'
+import type { TapRole, TapSort, TapWithAccess } from '@zako-ac/zako3-data'
 
 export const AdminTapsPage = () => {
   const { t } = useTranslation()

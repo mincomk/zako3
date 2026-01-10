@@ -30,5 +30,5 @@ export {
   type VerificationRequestInput,
   type CreateTapApiTokenInput,
   type UpdateTapApiTokenInput,
-} from './schemas'
+} from '@zako-ac/zako3-data'
 

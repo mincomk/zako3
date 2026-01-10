@@ -8,7 +8,7 @@ import type {
   TapStats,
   TimeSeriesPoint,
   UserSummary,
-} from '@/types'
+} from '@zako-ac/zako3-data'
 
 const TAP_OCCUPATIONS: TapOccupation[] = ['official', 'verified', 'base']
 const TAP_ROLES: TapRole[] = ['music', 'tts']

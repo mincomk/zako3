@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo } from 'react'
-import type { PaginationParams, PaginationMeta } from '@/types'
+import type { PaginationParams, PaginationMeta } from '@zako-ac/zako3-data'
 import { DEFAULT_PAGE_SIZE } from '@/lib/constants'
 
 interface UsePaginationOptions {

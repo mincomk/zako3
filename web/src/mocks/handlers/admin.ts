@@ -5,7 +5,7 @@ import type {
   PaginatedResponse,
   VerificationRequestFull,
   VerificationStatus,
-} from '@/types'
+} from '@zako-ac/zako3-data'
 import { createTapWithAccess } from '../data'
 
 const API_BASE = '/api'

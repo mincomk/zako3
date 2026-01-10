@@ -4,7 +4,7 @@ import {
   useQueryClient,
 } from '@tanstack/react-query'
 import { tapsApi } from './api'
-import type { TapFilters, TapSort, PaginationParams } from '@/types'
+import type { TapFilters, TapSort, PaginationParams } from '@zako-ac/zako3-data'
 import type {
   CreateTapInput,
   UpdateTapInput,
@@ -12,7 +12,7 @@ import type {
   VerificationRequestInput,
   CreateTapApiTokenInput,
   UpdateTapApiTokenInput,
-} from './schemas'
+} from '@zako-ac/zako3-data'
 
 export const tapKeys = {
   all: ['taps'] as const,

@@ -6,7 +6,7 @@ import type {
   Notification,
   NotificationFilters,
   NotificationSort,
-} from '@/types'
+} from '@zako-ac/zako3-data'
 
 interface GetNotificationsParams
   extends Partial<PaginationParams>, Partial<NotificationFilters> {
