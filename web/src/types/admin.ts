@@ -1,11 +1,2 @@
-export interface AdminActivity {
-  id: string
-  adminId: string
-  adminUsername: string
-  action: string
-  targetType: 'user' | 'tap' | 'notification' | 'system'
-  targetId: string
-  targetName: string
-  timestamp: string
-  details?: string
-}
+// DEPRECATED: Import from '@zako-ac/zako3-data' instead
+export * from '@zako-ac/zako3-data';
