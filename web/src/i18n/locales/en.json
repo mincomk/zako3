@@ -27,6 +27,17 @@
         "totalUsers": "Total Users"
       },
       "taps": {
+        "occupations": {
+            "verified": "Verified",
+            "official": "Official",
+            "base": "Base"
+        },
+        "permissions": {
+            "public": "Public",
+            "blacklisted": "Blacklisted Users",
+            "whitelisted": "Whitelisted Users",
+            "owner_only": "Owner Only"
+        },
         "actions": {
           "delete": ""
         },
