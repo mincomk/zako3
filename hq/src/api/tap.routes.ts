@@ -1,397 +1,453 @@
-import type { FastifyInstance, FastifyPluginOptions } from 'fastify';
-import type { Logger } from 'pino';
-import { z } from 'zod';
+import type { FastifyInstance, FastifyPluginOptions } from "fastify";
+import type { ZodTypeProvider } from "fastify-type-provider-zod";
+import type { Logger } from "pino";
 import {
-  TapService,
-  type CreateTapRequest,
-  type UpdateTapRequest,
-} from '../services/tap.service.js';
-import { requireAuth } from './context.js';
-import { isOk } from '../lib/result.js';
+    TapService,
+    type CreateTapRequest,
+    type UpdateTapRequest,
+} from "../services/tap.service.js";
+import { requireAuth } from "./context.js";
+import { isOk } from "../lib/result.js";
 import {
-  NotFoundError,
-  ForbiddenError,
-  ValidationError,
-  AppError,
-} from '../lib/errors.js';
-
-// Validation schemas
-const createTapRequestSchema = z.object({
-  id: z.string().min(3).max(50),
-  name: z.string().min(1).max(255),
-  description: z.string().max(1000).optional(),
-  isPrivate: z.boolean().optional(),
-});
-
-const updateTapRequestSchema = z.object({
-  name: z.string().min(1).max(255).optional(),
-  description: z.string().max(1000).optional(),
-  isPrivate: z.boolean().optional(),
-  isLocked: z.boolean().optional(),
-});
+    NotFoundError,
+    ForbiddenError,
+    ValidationError,
+    AppError,
+} from "../lib/errors.js";
+import {
+    errorResponseSchema,
+    createDataResponseSchema,
+    createPaginatedResponseSchema,
+    noContentResponseSchema,
+} from "../schemas/common.js";
+import {
+    tapSchema,
+    tapMemberSchema,
+    createTapRequestSchema,
+    updateTapRequestSchema,
+    listTapsQuerySchema,
+    tapIdParamSchema,
+} from "../schemas/tap.js";
 
 export interface TapRouteDependencies {
-  tapService: TapService;
-  logger: Logger;
+    tapService: TapService;
+    logger: Logger;
 }
 
 /**
  * Tap API routes
  */
 export function tapRoutes(deps: TapRouteDependencies) {
-  return async function (
-    fastify: FastifyInstance,
-    _opts: FastifyPluginOptions,
-  ) {
-    const log = deps.logger.child({ routes: 'taps' });
+    return async function (
+        fastify: FastifyInstance,
+        _opts: FastifyPluginOptions
+    ) {
+        const server = fastify.withTypeProvider<ZodTypeProvider>();
+        const log = deps.logger.child({ routes: "taps" });
 
-    /**
-     * GET /taps
-     * List taps with filtering and pagination
-     */
-    fastify.get<{
-      Querystring: {
-        page?: number;
-        limit?: number;
-        search?: string;
-        isVerified?: boolean;
-        ownerId?: string;
-      };
-    }>('/taps', async (request, reply) => {
-      try {
-        const { page, limit, search, isVerified, ownerId } = request.query;
-
-        const result = await deps.tapService.listTaps({
-          page: page ? Number(page) : undefined,
-          limit: limit ? Number(limit) : undefined,
-          search,
-          isVerified,
-          ownerId,
-        });
-
-        if (!isOk(result)) {
-          throw result.error;
-        }
-
-        return reply.send(result.value);
-      } catch (error) {
-        log.error({ error }, 'Failed to list taps');
-
-        if (error instanceof AppError) {
-          return reply.status(error.statusCode).send({
-            error: {
-              code: error.code || 'ERROR',
-              message: error.message,
+        /**
+         * GET /taps
+         * List taps with filtering and pagination
+         */
+        server.get(
+            "/taps",
+            {
+                schema: {
+                    tags: ["taps"],
+                    summary: "List taps",
+                    description:
+                        "Get a paginated list of taps with optional filtering",
+                    querystring: listTapsQuerySchema,
+                    response: {
+                        200: createPaginatedResponseSchema(tapSchema),
+                        500: errorResponseSchema,
+                    },
+                },
             },
-          });
-        }
+            async (request, reply) => {
+                try {
+                    const { page, limit, search, isVerified, ownerId } =
+                        request.query;
 
-        return reply.status(500).send({
-          error: {
-            code: 'INTERNAL_ERROR',
-            message: 'Failed to list taps',
-          },
-        });
-      }
-    });
+                    const result = await deps.tapService.listTaps({
+                        page: page ? Number(page) : undefined,
+                        limit: limit ? Number(limit) : undefined,
+                        search,
+                        isVerified,
+                        ownerId,
+                    });
 
-    /**
-     * POST /taps
-     * Create a new tap
-     */
-    fastify.post<{ Body: CreateTapRequest }>('/taps', async (request, reply) => {
-      try {
-        const auth = requireAuth(request);
+                    if (!isOk(result)) {
+                        return reply.status(500).send({
+                            error: {
+                                code: "INTERNAL_ERROR",
+                                message: "Failed to list taps",
+                            },
+                        });
+                    }
 
-        // Validate request body
-        const validationResult = createTapRequestSchema.safeParse(request.body);
-        if (!validationResult.success) {
-          return reply.status(400).send({
-            error: {
-              code: 'VALIDATION_ERROR',
-              message: 'Invalid request body',
-              details: validationResult.error.issues,
-            },
-          });
-        }
-
-        const result = await deps.tapService.createTap(
-          validationResult.data,
-          auth.userId,
+                    return reply.send(result.value);
+                } catch (error) {
+                    log.error({ error }, "Failed to list taps");
+                    return reply.status(500).send({
+                        error: {
+                            code: "INTERNAL_ERROR",
+                            message: "Failed to list taps",
+                        },
+                    });
+                }
+            }
         );
 
-        if (!isOk(result)) {
-          if (result.error instanceof ValidationError) {
-            return reply.status(400).send({
-              error: {
-                code: 'VALIDATION_ERROR',
-                message: result.error.message,
-              },
-            });
-          }
-          throw result.error;
-        }
-
-        return reply.status(201).send({ data: result.value });
-      } catch (error) {
-        log.error({ error }, 'Failed to create tap');
-
-        if (error instanceof AppError) {
-          return reply.status(error.statusCode).send({
-            error: {
-              code: error.code || 'ERROR',
-              message: error.message,
+        /**
+         * POST /taps
+         * Create a new tap
+         */
+        server.post(
+            "/taps",
+            {
+                schema: {
+                    tags: ["taps"],
+                    summary: "Create a tap",
+                    description: "Create a new tap (community)",
+                    body: createTapRequestSchema,
+                    response: {
+                        201: createDataResponseSchema(tapSchema),
+                        400: errorResponseSchema,
+                        401: errorResponseSchema,
+                        500: errorResponseSchema,
+                    },
+                    security: [{ bearerAuth: [] }],
+                },
             },
-          });
-        }
+            async (request, reply) => {
+                try {
+                    const auth = requireAuth(request);
+                    const result = await deps.tapService.createTap(
+                        request.body,
+                        auth.userId
+                    );
 
-        return reply.status(500).send({
-          error: {
-            code: 'INTERNAL_ERROR',
-            message: 'Failed to create tap',
-          },
-        });
-      }
-    });
+                    if (!isOk(result)) {
+                        if (result.error instanceof ValidationError) {
+                            return reply.status(400).send({
+                                error: {
+                                    code: "VALIDATION_ERROR",
+                                    message: result.error.message,
+                                },
+                            });
+                        }
+                        return reply.status(500).send({
+                            error: {
+                                code: "INTERNAL_ERROR",
+                                message: "Failed to create tap",
+                            },
+                        });
+                    }
 
-    /**
-     * GET /taps/:tapId
-     * Get details of a specific tap
-     */
-    fastify.get<{ Params: { tapId: string } }>(
-      '/taps/:tapId',
-      async (request, reply) => {
-        try {
-          const { tapId } = request.params;
-          const auth = requireAuth(request);
-
-          const result = await deps.tapService.getTap(tapId, auth.userId);
-
-          if (!isOk(result)) {
-            if (result.error instanceof NotFoundError) {
-              return reply.status(404).send({
-                error: {
-                  code: 'TAP_NOT_FOUND',
-                  message: result.error.message,
-                },
-              });
+                    return reply.status(201).send({ data: result.value });
+                } catch (error) {
+                    log.error({ error }, "Failed to create tap");
+                    return reply.status(500).send({
+                        error: {
+                            code: "INTERNAL_ERROR",
+                            message: "Failed to create tap",
+                        },
+                    });
+                }
             }
-            if (result.error instanceof ForbiddenError) {
-              return reply.status(403).send({
-                error: {
-                  code: 'FORBIDDEN',
-                  message: result.error.message,
+        );
+
+        /**
+         * GET /taps/:tapId
+         * Get details of a specific tap
+         */
+        server.get(
+            "/taps/:tapId",
+            {
+                schema: {
+                    tags: ["taps"],
+                    summary: "Get tap details",
+                    description:
+                        "Get detailed information about a specific tap",
+                    params: tapIdParamSchema,
+                    response: {
+                        200: createDataResponseSchema(tapSchema),
+                        401: errorResponseSchema,
+                        403: errorResponseSchema,
+                        404: errorResponseSchema,
+                        500: errorResponseSchema,
+                    },
+                    security: [{ bearerAuth: [] }],
                 },
-              });
-            }
-            throw result.error;
-          }
-
-          return reply.send({ data: result.value });
-        } catch (error) {
-          log.error({ error }, 'Failed to get tap');
-
-          if (error instanceof AppError) {
-            return reply.status(error.statusCode).send({
-              error: {
-                code: error.code || 'ERROR',
-                message: error.message,
-              },
-            });
-          }
-
-          return reply.status(500).send({
-            error: {
-              code: 'INTERNAL_ERROR',
-              message: 'Failed to get tap',
             },
-          });
-        }
-      },
-    );
+            async (request, reply) => {
+                try {
+                    const { tapId } = request.params;
+                    const auth = requireAuth(request);
 
-    /**
-     * PATCH /taps/:tapId
-     * Update a tap
-     */
-    fastify.patch<{ Params: { tapId: string }; Body: UpdateTapRequest }>(
-      '/taps/:tapId',
-      async (request, reply) => {
-        try {
-          const { tapId } = request.params;
-          const auth = requireAuth(request);
+                    const result = await deps.tapService.getTap(
+                        tapId,
+                        auth.userId
+                    );
 
-          // Validate request body
-          const validationResult = updateTapRequestSchema.safeParse(request.body);
-          if (!validationResult.success) {
-            return reply.status(400).send({
-              error: {
-                code: 'VALIDATION_ERROR',
-                message: 'Invalid request body',
-                details: validationResult.error.issues,
-              },
-            });
-          }
+                    if (!isOk(result)) {
+                        if (result.error instanceof NotFoundError) {
+                            return reply.status(404).send({
+                                error: {
+                                    code: "TAP_NOT_FOUND",
+                                    message: result.error.message,
+                                },
+                            });
+                        }
+                        if (result.error instanceof ForbiddenError) {
+                            return reply.status(403).send({
+                                error: {
+                                    code: "FORBIDDEN",
+                                    message: result.error.message,
+                                },
+                            });
+                        }
+                        return reply.status(500).send({
+                            error: {
+                                code: "INTERNAL_ERROR",
+                                message: "Failed to get tap",
+                            },
+                        });
+                    }
 
-          const result = await deps.tapService.updateTap(
-            tapId,
-            validationResult.data,
-            auth.userId,
-          );
-
-          if (!isOk(result)) {
-            if (result.error instanceof NotFoundError) {
-              return reply.status(404).send({
-                error: {
-                  code: 'TAP_NOT_FOUND',
-                  message: result.error.message,
-                },
-              });
+                    return reply.send({ data: result.value });
+                } catch (error) {
+                    log.error({ error }, "Failed to get tap");
+                    return reply.status(500).send({
+                        error: {
+                            code: "INTERNAL_ERROR",
+                            message: "Failed to get tap",
+                        },
+                    });
+                }
             }
-            if (result.error instanceof ForbiddenError) {
-              return reply.status(403).send({
-                error: {
-                  code: 'FORBIDDEN',
-                  message: result.error.message,
+        );
+
+        /**
+         * PATCH /taps/:tapId
+         * Update a tap
+         */
+        server.patch(
+            "/taps/:tapId",
+            {
+                schema: {
+                    tags: ["taps"],
+                    summary: "Update tap",
+                    description: "Update tap properties (owner or admin only)",
+                    params: tapIdParamSchema,
+                    body: updateTapRequestSchema,
+                    response: {
+                        200: createDataResponseSchema(tapSchema),
+                        400: errorResponseSchema,
+                        401: errorResponseSchema,
+                        403: errorResponseSchema,
+                        404: errorResponseSchema,
+                        500: errorResponseSchema,
+                    },
+                    security: [{ bearerAuth: [] }],
                 },
-              });
-            }
-            throw result.error;
-          }
-
-          return reply.send({ data: result.value });
-        } catch (error) {
-          log.error({ error }, 'Failed to update tap');
-
-          if (error instanceof AppError) {
-            return reply.status(error.statusCode).send({
-              error: {
-                code: error.code || 'ERROR',
-                message: error.message,
-              },
-            });
-          }
-
-          return reply.status(500).send({
-            error: {
-              code: 'INTERNAL_ERROR',
-              message: 'Failed to update tap',
             },
-          });
-        }
-      },
-    );
+            async (request, reply) => {
+                try {
+                    const { tapId } = request.params;
+                    const auth = requireAuth(request);
 
-    /**
-     * DELETE /taps/:tapId
-     * Delete a tap
-     */
-    fastify.delete<{ Params: { tapId: string } }>(
-      '/taps/:tapId',
-      async (request, reply) => {
-        try {
-          const { tapId } = request.params;
-          const auth = requireAuth(request);
+                    const result = await deps.tapService.updateTap(
+                        tapId,
+                        request.body,
+                        auth.userId
+                    );
 
-          const result = await deps.tapService.deleteTap(tapId, auth.userId);
+                    if (!isOk(result)) {
+                        if (result.error instanceof NotFoundError) {
+                            return reply.status(404).send({
+                                error: {
+                                    code: "TAP_NOT_FOUND",
+                                    message: result.error.message,
+                                },
+                            });
+                        }
+                        if (result.error instanceof ForbiddenError) {
+                            return reply.status(403).send({
+                                error: {
+                                    code: "FORBIDDEN",
+                                    message: result.error.message,
+                                },
+                            });
+                        }
+                        if (result.error instanceof ValidationError) {
+                            return reply.status(400).send({
+                                error: {
+                                    code: "VALIDATION_ERROR",
+                                    message: result.error.message,
+                                },
+                            });
+                        }
+                        return reply.status(500).send({
+                            error: {
+                                code: "INTERNAL_ERROR",
+                                message: "Failed to update tap",
+                            },
+                        });
+                    }
 
-          if (!isOk(result)) {
-            if (result.error instanceof NotFoundError) {
-              return reply.status(404).send({
-                error: {
-                  code: 'TAP_NOT_FOUND',
-                  message: result.error.message,
-                },
-              });
+                    return reply.send({ data: result.value });
+                } catch (error) {
+                    log.error({ error }, "Failed to update tap");
+                    return reply.status(500).send({
+                        error: {
+                            code: "INTERNAL_ERROR",
+                            message: "Failed to update tap",
+                        },
+                    });
+                }
             }
-            if (result.error instanceof ForbiddenError) {
-              return reply.status(403).send({
-                error: {
-                  code: 'FORBIDDEN',
-                  message: result.error.message,
+        );
+
+        /**
+         * DELETE /taps/:tapId
+         * Delete a tap
+         */
+        server.delete(
+            "/taps/:tapId",
+            {
+                schema: {
+                    tags: ["taps"],
+                    summary: "Delete tap",
+                    description: "Delete a tap (owner only)",
+                    params: tapIdParamSchema,
+                    response: {
+                        204: noContentResponseSchema,
+                        401: errorResponseSchema,
+                        403: errorResponseSchema,
+                        404: errorResponseSchema,
+                        500: errorResponseSchema,
+                    },
+                    security: [{ bearerAuth: [] }],
                 },
-              });
-            }
-            throw result.error;
-          }
-
-          return reply.status(204).send();
-        } catch (error) {
-          log.error({ error }, 'Failed to delete tap');
-
-          if (error instanceof AppError) {
-            return reply.status(error.statusCode).send({
-              error: {
-                code: error.code || 'ERROR',
-                message: error.message,
-              },
-            });
-          }
-
-          return reply.status(500).send({
-            error: {
-              code: 'INTERNAL_ERROR',
-              message: 'Failed to delete tap',
             },
-          });
-        }
-      },
-    );
+            async (request, reply) => {
+                try {
+                    const { tapId } = request.params;
+                    const auth = requireAuth(request);
 
-    /**
-     * GET /taps/:tapId/members
-     * Get tap members
-     */
-    fastify.get<{ Params: { tapId: string } }>(
-      '/taps/:tapId/members',
-      async (request, reply) => {
-        try {
-          const { tapId } = request.params;
-          const auth = requireAuth(request);
+                    const result = await deps.tapService.deleteTap(
+                        tapId,
+                        auth.userId
+                    );
 
-          const result = await deps.tapService.getTapMembers(tapId, auth.userId);
+                    if (!isOk(result)) {
+                        if (result.error instanceof NotFoundError) {
+                            return reply.status(404).send({
+                                error: {
+                                    code: "TAP_NOT_FOUND",
+                                    message: result.error.message,
+                                },
+                            });
+                        }
+                        if (result.error instanceof ForbiddenError) {
+                            return reply.status(403).send({
+                                error: {
+                                    code: "FORBIDDEN",
+                                    message: result.error.message,
+                                },
+                            });
+                        }
+                        return reply.status(500).send({
+                            error: {
+                                code: "INTERNAL_ERROR",
+                                message: "Failed to delete tap",
+                            },
+                        });
+                    }
 
-          if (!isOk(result)) {
-            if (result.error instanceof NotFoundError) {
-              return reply.status(404).send({
-                error: {
-                  code: 'TAP_NOT_FOUND',
-                  message: result.error.message,
-                },
-              });
+                    return reply.status(204).send();
+                } catch (error) {
+                    log.error({ error }, "Failed to delete tap");
+                    return reply.status(500).send({
+                        error: {
+                            code: "INTERNAL_ERROR",
+                            message: "Failed to delete tap",
+                        },
+                    });
+                }
             }
-            if (result.error instanceof ForbiddenError) {
-              return reply.status(403).send({
-                error: {
-                  code: 'FORBIDDEN',
-                  message: result.error.message,
+        );
+
+        /**
+         * GET /taps/:tapId/members
+         * Get tap members
+         */
+        server.get(
+            "/taps/:tapId/members",
+            {
+                schema: {
+                    tags: ["taps"],
+                    summary: "Get tap members",
+                    description: "Get list of tap members",
+                    params: tapIdParamSchema,
+                    response: {
+                        200: createDataResponseSchema(tapMemberSchema.array()),
+                        401: errorResponseSchema,
+                        403: errorResponseSchema,
+                        404: errorResponseSchema,
+                        500: errorResponseSchema,
+                    },
+                    security: [{ bearerAuth: [] }],
                 },
-              });
-            }
-            throw result.error;
-          }
-
-          return reply.send({ data: result.value });
-        } catch (error) {
-          log.error({ error }, 'Failed to get tap members');
-
-          if (error instanceof AppError) {
-            return reply.status(error.statusCode).send({
-              error: {
-                code: error.code || 'ERROR',
-                message: error.message,
-              },
-            });
-          }
-
-          return reply.status(500).send({
-            error: {
-              code: 'INTERNAL_ERROR',
-              message: 'Failed to get tap members',
             },
-          });
-        }
-      },
-    );
-  };
+            async (request, reply) => {
+                try {
+                    const { tapId } = request.params;
+                    const auth = requireAuth(request);
+
+                    const result = await deps.tapService.getTapMembers(
+                        tapId,
+                        auth.userId
+                    );
+
+                    if (!isOk(result)) {
+                        if (result.error instanceof NotFoundError) {
+                            return reply.status(404).send({
+                                error: {
+                                    code: "TAP_NOT_FOUND",
+                                    message: result.error.message,
+                                },
+                            });
+                        }
+                        if (result.error instanceof ForbiddenError) {
+                            return reply.status(403).send({
+                                error: {
+                                    code: "FORBIDDEN",
+                                    message: result.error.message,
+                                },
+                            });
+                        }
+                        return reply.status(500).send({
+                            error: {
+                                code: "INTERNAL_ERROR",
+                                message: "Failed to get tap members",
+                            },
+                        });
+                    }
+
+                    return reply.send({ data: result.value });
+                } catch (error) {
+                    log.error({ error }, "Failed to get tap members");
+                    return reply.status(500).send({
+                        error: {
+                            code: "INTERNAL_ERROR",
+                            message: "Failed to get tap members",
+                        },
+                    });
+                }
+            }
+        );
+    };
 }
