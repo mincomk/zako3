@@ -32,7 +32,7 @@ impl Default for Config {
             current_context: "default".to_string(),
             contexts: vec![Context {
                 name: "default".to_string(),
-                ae_addr: "http://[::1]:50051".to_string(),
+                ae_addr: "http://127.0.0.1:50051".to_string(),
                 default_guild_id: None,
             }],
             aliases: HashMap::new(),

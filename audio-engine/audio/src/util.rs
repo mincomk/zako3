@@ -1,11 +1,9 @@
-use crate::{BoxConsumer, BoxProducer, PCMReceiver, PCMSender};
+use ringbuf::{HeapRb, traits::Split};
 
-pub fn create_boxed_ringbuf_pair() -> (BoxProducer, BoxConsumer) {
-    crossbeam::channel::unbounded()
-}
+use crate::{RINGBUFFER_SIZE, RingCons, RingProd};
 
-pub fn create_async_pcm_pair() -> (PCMSender, PCMReceiver) {
-    tokio::sync::mpsc::channel(16)
+pub fn create_ringbuf_pair() -> (RingProd, RingCons) {
+    HeapRb::new(RINGBUFFER_SIZE).split()
 }
 
 pub fn async_to_sync_read<T>(async_read: T) -> std::io::Result<impl std::io::Read>

@@ -32,7 +32,7 @@ impl AppConfig {
         match envy::from_env::<AppConfig>() {
             Ok(config) => config,
             Err(e) => {
-                tracing::error!("Failed to load configuration: {}", e);
+                eprintln!("Failed to load configuration: {}", e);
                 std::process::exit(1);
             }
         }

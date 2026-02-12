@@ -1,7 +1,9 @@
 use std::collections::VecDeque;
 use std::sync::Arc;
+use std::time::Duration;
 
 use mockall::automock;
+use ringbuf::traits::{Observer, Producer};
 use serenity::async_trait;
 use symphonia::core::io::MediaSourceStream;
 use symphonia::core::{audio::SampleBuffer, io::ReadOnlySource};
@@ -10,13 +12,8 @@ use tokio::sync::oneshot::Sender;
 use tracing::instrument;
 use zako3_audio_engine_types::ZakoError;
 
-use crate::{
-    BoxProducer,
-    error::ZakoResult,
-    metrics,
-    types::{BoxConsumer, TrackId},
-};
-use crate::{async_to_sync_read, create_boxed_ringbuf_pair};
+use crate::{RingCons, RingProd, async_to_sync_read, create_ringbuf_pair, speed_control};
+use crate::{error::ZakoResult, metrics, types::TrackId};
 
 pub type ArcDecoder = Arc<dyn Decoder>;
 
@@ -27,7 +24,7 @@ pub trait Decoder: Send + Sync + 'static {
         &self,
         track_id: TrackId,
         stream: Box<dyn AsyncRead + Unpin + Send + Sync>,
-    ) -> ZakoResult<BoxConsumer>;
+    ) -> ZakoResult<RingCons>;
 }
 
 pub struct SymphoniaDecoder;
@@ -39,13 +36,13 @@ impl Decoder for SymphoniaDecoder {
         &self,
         track_id: TrackId,
         stream: Box<dyn AsyncRead + Unpin + Send + Sync>,
-    ) -> ZakoResult<BoxConsumer> {
+    ) -> ZakoResult<RingCons> {
         let media_source = create_media_source(stream)?;
 
-        let (boxed_producer, consumer) = create_boxed_ringbuf_pair();
-        spawn_decode_task(track_id, media_source, boxed_producer).await?;
+        let (prod, cons) = create_ringbuf_pair();
+        spawn_decode_task(track_id, media_source, prod).await?;
 
-        Ok(consumer)
+        Ok(cons)
     }
 }
 
@@ -59,7 +56,7 @@ fn create_media_source(
 async fn spawn_decode_task(
     track_id: TrackId,
     media_source: Box<dyn symphonia::core::io::MediaSource>,
-    producer: BoxProducer,
+    producer: RingProd,
 ) -> ZakoResult<()> {
     let (sender, receiver) = tokio::sync::oneshot::channel();
 
@@ -88,7 +85,7 @@ async fn spawn_decode_task(
 fn spawn_decode_task_raw(
     track_id: TrackId,
     media_source: Box<dyn symphonia::core::io::MediaSource>,
-    producer: BoxProducer,
+    mut producer: RingProd,
     sender: Sender<ZakoResult<()>>,
 ) -> ZakoResult<()> {
     let mss = MediaSourceStream::new(media_source, Default::default());
@@ -137,6 +134,12 @@ fn spawn_decode_task_raw(
     let mut mid_buffer = VecDeque::new();
     let mut decode_error_count = 0u32;
     const MAX_CONSECUTIVE_ERRORS: u32 = 10;
+
+    let speed_control_config = speed_control::SpeedControlConfig {
+        min_delay: Duration::from_millis(1),
+        max_delay: Duration::from_millis(100),
+        target_fill_ratio: 0.5,
+    };
 
     loop {
         let packet = match probed.format.next_packet() {
@@ -191,15 +194,49 @@ fn spawn_decode_task_raw(
             let samples = buf.samples();
             mid_buffer.extend(samples);
 
-            while mid_buffer.len() >= crate::BUFFER_SIZE {
-                let mut pcm_sample = [0.0f32; crate::BUFFER_SIZE];
-                for i in 0..crate::BUFFER_SIZE {
-                    pcm_sample[i] = mid_buffer.pop_front().unwrap();
+            let buffer_len = producer.vacant_len();
+
+            // Push as much as we can to the ring buffer
+            for _ in 0..buffer_len {
+                if let Some(sample) = mid_buffer.pop_front() {
+                    if producer.try_push(sample).is_err() {
+                        // This can only happen if the consumer was dropped, so we can just exit
+                        tracing::debug!(track_id = %track_id, "Producer push failed, consumer likely dropped, ending decode task");
+                        return Ok(());
+                    }
+                } else {
+                    break;
                 }
-                if let Err(e) = producer.send(pcm_sample) {
-                    tracing::debug!(track_id = %track_id, error = %e, "Producer channel closed");
+            }
+
+            if !producer.read_is_held() {
+                // consumer dropped
+                tracing::debug!(track_id = %track_id, "Consumer dropped, ending decode task");
+                break;
+            }
+
+            let delay = speed_control::calculate_delay(
+                &speed_control_config,
+                producer.occupied_len(),
+                producer.capacity().into(),
+            );
+
+            std::thread::sleep(delay);
+        }
+    }
+
+    // loop until the mid buffer is drained
+    while !mid_buffer.is_empty() {
+        let buffer_len = producer.vacant_len();
+
+        for _ in 0..buffer_len {
+            if let Some(sample) = mid_buffer.pop_front() {
+                if producer.try_push(sample).is_err() {
+                    tracing::debug!(track_id = %track_id, "Producer push failed during drain, consumer likely dropped, ending decode task");
                     return Ok(());
                 }
+            } else {
+                break;
             }
         }
     }

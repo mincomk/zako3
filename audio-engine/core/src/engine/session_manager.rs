@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use dashmap::DashMap;
 use tracing::instrument;
-use zako3_audio_engine_audio::{create_async_pcm_pair, create_stream_input, metrics};
+use zako3_audio_engine_audio::{create_ringbuf_pair, create_sync_stream_input, metrics};
 
 use crate::{
     ArcDiscordService, ArcStateService, ArcTapHubService,
@@ -38,7 +38,7 @@ impl SessionManager {
     async fn initiate_session(&self, guild_id: GuildId) -> ZakoResult<()> {
         tracing::debug!("Initiating audio session");
 
-        let (prod, cons) = create_async_pcm_pair();
+        let (prod, cons) = create_ringbuf_pair();
 
         let mixer = create_thread_mixer(prod);
         let decoder = SymphoniaDecoder;
@@ -52,7 +52,7 @@ impl SessionManager {
         );
 
         self.discord_service
-            .play_audio(guild_id, create_stream_input(cons).await?.create_input())
+            .play_audio(guild_id, create_sync_stream_input(cons)?.into())
             .await?;
 
         self.sessions.insert(guild_id, control);

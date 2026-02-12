@@ -15,10 +15,12 @@ use zako3_audio_engine_infra::{
 use tonic::transport::Server;
 use zako3_audio_engine_telemetry::TelemetryConfig;
 
-#[tokio::main(flavor = "multi_thread", worker_threads = 32)]
+#[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = AppConfig::load();
     let addr = config.addr();
+
+    println!("Starting zako3 audio engine...");
 
     let telem_config = TelemetryConfig {
         service_name: config.service_name.clone(),
