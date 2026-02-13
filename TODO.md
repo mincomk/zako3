@@ -2,3 +2,5 @@
 - [ ] Add CI
 
 - [ ] Cache -> TapHub
+
+- Multiple bots
