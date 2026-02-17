@@ -1,8 +1,23 @@
 [package]
-name = "zako3-hq-core"
+name = "hq-core"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 
 [dependencies]
-async-trait = "0.1.89"
-tokio = { version = "1.49.0", features = ["full"] }
+hq-types = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+sqlx = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+tracing = { workspace = true }
+reqwest = { workspace = true }
+jsonwebtoken = { workspace = true }
+oauth2 = { workspace = true }
+config = { workspace = true }
+dotenvy = { workspace = true }
+anyhow = { workspace = true }
+mockall = { workspace = true }

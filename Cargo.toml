@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["audio-engine/audio","audio-engine/controller","audio-engine/core", "audio-engine/infra", "audio-engine/protos", "audio-engine/telemetry", "audio-engine/types", "cache", "emoji-matcher", "hq/backend", "hq/core", "hq/types", "taphub/core", "taphub/infra", "taphub/transport", "taphub/types", "zakoctl"]
+members = ["audio-engine/audio","audio-engine/controller","audio-engine/core", "audio-engine/infra", "audio-engine/protos", "audio-engine/telemetry", "audio-engine/types", "cache", "emoji-matcher", "hq/backend", "hq/bot", "hq/core", "hq/types", "taphub/core", "taphub/infra", "taphub/transport", "taphub/types", "zakoctl"]
 
 [workspace.dependencies]
 zako3-audio-engine-types = { path = "audio-engine/types" }
@@ -9,6 +9,37 @@ zako3-audio-engine-infra = { path = "audio-engine/infra" }
 zako3-audio-engine-protos = { path = "audio-engine/protos" }
 zako3-audio-engine-telemetry = { path = "audio-engine/telemetry" }
 zako3-audio-engine-audio = { path = "audio-engine/audio", features = ["telemetry"] }
+
+# HQ Dependencies
+hq-types = { path = "hq/types" }
+hq-core = { path = "hq/core" }
+hq-backend = { path = "hq/backend" }
+hq-bot = { path = "hq/bot" }
+
+tokio = { version = "1.36", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "1.0"
+async-trait = "0.1"
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "macros"] }
+uuid = { version = "1.7", features = ["serde", "v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+axum = "0.7"
+tower-http = { version = "0.5", features = ["trace", "cors"] }
+poise = "0.6"
+serenity = { version = "0.12", default-features = false, features = ["client", "gateway", "rustls_backend", "model"] }
+reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"] }
+jsonwebtoken = "9.2"
+oauth2 = "4.4"
+derive_more = { version = "1.0.0-beta.6", features = ["full"] }
+utoipa = { version = "4.2", features = ["axum_extras", "uuid", "chrono"] }
+utoipa-swagger-ui = { version = "6.0", features = ["axum"] }
+dotenvy = "0.15"
+config = "0.13"
+anyhow = "1.0"
+mockall = "0.12"
 
 [profile.dev]
 incremental = false

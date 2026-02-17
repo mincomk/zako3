@@ -1,8 +1,14 @@
 pub mod user;
 pub use user::*;
 
-pub mod permission;
-pub use permission::*;
+pub mod tap;
+pub use tap::*;
 
-pub mod settings;
-pub use settings::*;
+pub mod misc;
+pub use misc::*;
+
+// pub mod settings;
+// pub use settings::*;
+
+pub mod dtos;
+pub use dtos::*;

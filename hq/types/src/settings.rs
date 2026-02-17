@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::TapId;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TextMappingRule {
     pub pattern: String,
@@ -15,8 +17,35 @@ pub struct EmojiMappingRule {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TextReadingRule {
+    Always,
+    InVoiceChannel,
+    OnMicMute,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "type", content = "value")]
+pub enum UserJoinLeaveAlert {
+    Auto,
+    Off,
+
+    /// XXX 등장, XXX 퇴장
+    WithDifferentUsername(String),
+
+    Custom {
+        join_message: String,
+        leave_message: String,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
     pub text_mappings: Vec<TextMappingRule>,
     pub emoji_mappings: Vec<EmojiMappingRule>,
-    pub read_text_even_not_in_vc: bool,
+    pub text_reading_rule: TextReadingRule,
+    pub user_join_leave_alert: UserJoinLeaveAlert,
+    pub max_message_length: u16,
+    pub enable_tts_queue: bool,
+    pub tts_voice: Option<TapId>,
 }
