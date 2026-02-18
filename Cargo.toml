@@ -55,4 +55,3 @@ overflow-checks = false
 codegen-units = 1
 debug = true
 opt-level = 0
-panic = "unwind"

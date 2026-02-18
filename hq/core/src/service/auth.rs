@@ -48,10 +48,7 @@ impl AuthService {
 
         if !token_res.status().is_success() {
             let status = token_res.status();
-            let body = token_res
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unknown error".to_string());
+            let body = token_res.text().await?;
             return Err(CoreError::Unauthorized(format!(
                 "Discord OAuth2 token request failed: {} - {}",
                 status, body
@@ -74,10 +71,7 @@ impl AuthService {
 
         if !user_res.status().is_success() {
             let status = user_res.status();
-            let body = user_res
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unknown error".to_string());
+            let body = user_res.text().await?;
             return Err(CoreError::Unauthorized(format!(
                 "Discord user info request failed: {} - {}",
                 status, body
@@ -89,7 +83,11 @@ impl AuthService {
         let discord_id = user_data["id"].as_str().ok_or(CoreError::Unauthorized(
             "Failed to get user info".to_string(),
         ))?;
-        let username = user_data["username"].as_str().unwrap_or("Unknown");
+        let username = user_data["username"]
+            .as_str()
+            .ok_or(CoreError::Unauthorized(
+                "Missing username in Discord response".to_string(),
+            ))?;
 
         // Find or create user
         let user = self.get_or_create_user(discord_id, username).await?;

@@ -1,6 +1,6 @@
 ---
 description: Write a codebase.
-mode: primary
+mode: subagent
 model: github-copilot/gemini-3-pro-preview
 temperature: 0.1
 tools:
@@ -18,10 +18,6 @@ Once the plan is approved, you can start implementing the codebase. During this 
 ### Testing and Review Phase
 After implementing the codebase, it's crucial to thoroughly test and review your code. This includes:
 - `cargo test` to run unit tests and ensure that all tests pass successfully.
-- `cargo clippy` to analyze your code for potential issues and ensure that it adheres to Rust's best practices.
-- `cargo fmt` to format your code according to standard Rust style guidelines, ensuring consistency and readability.
-
-Then, use `@review` sub-agent to review your code for quality and best practices, potential bugs and edge cases, performance implications, and security considerations.
 
 ## Code Quality
 - No comments.
@@ -37,5 +33,13 @@ Then, use `@review` sub-agent to review your code for quality and best practices
 - Consider edge cases and potential failure points in your tests to ensure robustness.
 - Use proptest or similar libraries for property-based testing to explore a wide range of inputs and scenarios.
 
+## Extra
+Extra rules to follow during implementation goes here.
+- Maintain `PROJECT_STRUCTURE.md` to document the structure of the codebase and the responsibilities of each module and file. This will help maintain clarity and organization as the codebase grows.
+- Avoid using `unwrap_or` to mask errors, especially in database and network operations. Propagate errors using `?` or map them to appropriate application errors.
+- `unwrap_or(None)` on `row.try_get` for optional columns is an anti-pattern because it masks column type mismatches and missing columns; `try_get` handles NULLs correctly for `Option<T>` types.
+
+## Final Guide
 Feel free to ad library. No comment at all. NO unwrap() or expect().
+Actively test/check your code with `cargo test` and `cargo check` to ensure that it adheres to best practices and is free of common mistakes. Make sure you don't have any compilation errors or warnings before submitting your code for review. But ignore unused thing and formatting warnings, as they can be easily fixed in the clean phase.
 Prefer CLI (`cargo add`) over manual editing of `Cargo.toml`.

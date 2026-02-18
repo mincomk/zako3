@@ -23,22 +23,19 @@ impl PgTapRepository {
 #[async_trait]
 impl TapRepository for PgTapRepository {
     async fn create(&self, tap: &Tap) -> CoreResult<Tap> {
-        let id: Uuid = tap.id.0;
-        let owner_id: Uuid = tap.owner_id.0;
-        let name: String = tap.name.0.clone();
+        let id = tap.id.0;
+        let owner_id = tap.owner_id.0;
+        let name = tap.name.0.clone();
         let description = tap.description.clone();
-        let occupation: String = serde_json::to_string(&tap.occupation)
-            .unwrap_or_else(|_| "base".to_string())
+        let occupation = serde_json::to_string(&tap.occupation)?
             .trim_matches('"')
-            .to_string(); // Simple serialization for TEXT
-        let permission =
-            serde_json::to_value(&tap.permission).unwrap_or(serde_json::json!("owner_only"));
-        let role = tap.role.as_ref().map(|r| {
-            serde_json::to_string(r)
-                .unwrap_or_default()
-                .trim_matches('"')
-                .to_string()
-        });
+            .to_string();
+        let permission = serde_json::to_value(&tap.permission)?;
+        let role = if let Some(r) = &tap.role {
+            Some(serde_json::to_string(r)?.trim_matches('"').to_string())
+        } else {
+            None
+        };
 
         sqlx::query(
             r#"
@@ -46,7 +43,6 @@ impl TapRepository for PgTapRepository {
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             "#,
         )
-
         .bind(id)
         .bind(owner_id)
         .bind(name)
@@ -77,30 +73,28 @@ impl TapRepository for PgTapRepository {
         let taps = rows
             .into_iter()
             .map(|row| {
-                let id: Uuid = row.try_get("id").unwrap();
-                let owner_id: Uuid = row.try_get("owner_id").unwrap();
-                let name: String = row.try_get("name").unwrap();
-                let description: Option<String> = row.try_get("description").unwrap_or(None);
+                let id: Uuid = row.try_get("id")?;
+                let owner_id: Uuid = row.try_get("owner_id")?;
+                let name: String = row.try_get("name")?;
+                let description: Option<String> = row.try_get("description")?;
 
-                let occupation_str: String = row
-                    .try_get("occupation")
-                    .unwrap_or_else(|_| "base".to_string());
-                let occupation = serde_json::from_str(&format!("\"{}\"", occupation_str))
-                    .unwrap_or(hq_types::TapOccupation::Base);
+                let occupation_str: String = row.try_get("occupation")?;
+                let occupation = serde_json::from_str(&format!("\"{}\"", occupation_str))?;
 
-                let permission_val: serde_json::Value = row
-                    .try_get("permission")
-                    .unwrap_or(serde_json::json!("owner_only"));
-                let permission = serde_json::from_value(permission_val)
-                    .unwrap_or(hq_types::TapPermission::OwnerOnly);
+                let permission_val: serde_json::Value = row.try_get("permission")?;
+                let permission = serde_json::from_value(permission_val)?;
 
-                let role_str: Option<String> = row.try_get("role").unwrap_or(None);
-                let role = role_str.and_then(|r| serde_json::from_str(&format!("\"{}\"", r)).ok());
+                let role_str: Option<String> = row.try_get("role")?;
+                let role = if let Some(r) = role_str {
+                    Some(serde_json::from_str(&format!("\"{}\"", r))?)
+                } else {
+                    None
+                };
 
-                let created_at: chrono::DateTime<chrono::Utc> = row.try_get("created_at").unwrap();
-                let updated_at: chrono::DateTime<chrono::Utc> = row.try_get("updated_at").unwrap();
+                let created_at: chrono::DateTime<chrono::Utc> = row.try_get("created_at")?;
+                let updated_at: chrono::DateTime<chrono::Utc> = row.try_get("updated_at")?;
 
-                Tap {
+                Ok(Tap {
                     id: TapId(id),
                     name: TapName(name),
                     description,
@@ -112,9 +106,9 @@ impl TapRepository for PgTapRepository {
                         created_at,
                         updated_at,
                     },
-                }
+                })
             })
-            .collect();
+            .collect::<CoreResult<Vec<Tap>>>()?;
 
         Ok(taps)
     }
