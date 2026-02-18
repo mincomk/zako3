@@ -35,8 +35,8 @@ impl UserRepository for PgUserRepository {
             let id: Uuid = row.try_get("id")?;
             let discord_user_id: String = row.try_get("discord_user_id")?;
             let username: String = row.try_get("username")?;
-            let avatar_url: Option<String> = row.try_get("avatar_url").unwrap_or(None);
-            let email: Option<String> = row.try_get("email").unwrap_or(None);
+            let avatar_url: Option<String> = row.try_get("avatar_url")?;
+            let email: Option<String> = row.try_get("email")?;
             let created_at: chrono::DateTime<chrono::Utc> = row.try_get("created_at")?;
             let updated_at: chrono::DateTime<chrono::Utc> = row.try_get("updated_at")?;
 
@@ -94,8 +94,8 @@ impl UserRepository for PgUserRepository {
             let id: Uuid = row.try_get("id")?;
             let discord_user_id: String = row.try_get("discord_user_id")?;
             let username: String = row.try_get("username")?;
-            let avatar_url: Option<String> = row.try_get("avatar_url").unwrap_or(None);
-            let email: Option<String> = row.try_get("email").unwrap_or(None);
+            let avatar_url: Option<String> = row.try_get("avatar_url")?;
+            let email: Option<String> = row.try_get("email")?;
             let created_at: chrono::DateTime<chrono::Utc> = row.try_get("created_at")?;
             let updated_at: chrono::DateTime<chrono::Utc> = row.try_get("updated_at")?;
 
