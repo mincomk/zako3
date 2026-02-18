@@ -9,6 +9,7 @@ pub struct AppConfig {
     pub discord_client_id: String,
     pub discord_client_secret: String,
     pub discord_redirect_uri: String,
+    pub discord_bot_token: String,
     pub jwt_secret: String,
 }
 
@@ -21,6 +22,7 @@ impl AppConfig {
             discord_client_id: env::var("DISCORD_CLIENT_ID")?,
             discord_client_secret: env::var("DISCORD_CLIENT_SECRET")?,
             discord_redirect_uri: env::var("DISCORD_REDIRECT_URI")?,
+            discord_bot_token: env::var("DISCORD_BOT_TOKEN")?,
             jwt_secret: env::var("JWT_SECRET")?,
         })
     }
