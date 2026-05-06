@@ -35,6 +35,7 @@ impl TransportClient {
 
         let mut protofish_config = ProtofishConfig::default();
         protofish_config.handshake_timeout = Duration::from_secs(10);
+        protofish_config.mani_config.backpressure_credit_batch_size = 1;
 
         let config = ClientConfig {
             bind_address: bind_addr,
@@ -178,7 +179,10 @@ impl TransportClient {
         {
             TapHubResponse::MetaReady(meta) => Ok(meta),
             TapHubResponse::Error(e) => Err(e),
-            resp => Err(format!("Unexpected response to RequestAudioMeta: {:?}", resp)),
+            resp => Err(format!(
+                "Unexpected response to RequestAudioMeta: {:?}",
+                resp
+            )),
         }
     }
 }
