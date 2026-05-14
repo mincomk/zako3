@@ -1,8 +1,8 @@
-use crate::{ui, util, Context, Error};
+use crate::{Context, Error, ui, util};
 use hq_core::CoreError;
 use hq_types::{
-    hq::{DiscordUserId, TapId, TapName},
     AudioRequestString, AudioStopFilter, ChannelId, GuildId, QueueName, Volume,
+    hq::{DiscordUserId, TapId, TapName},
 };
 use poise::serenity_prelude as serenity;
 
@@ -125,7 +125,11 @@ pub async fn play(
 
 async fn resolve_tap_id(ctx: Context<'_>, name: &str) -> Result<TapId, Error> {
     let service = &ctx.data().service;
-    if let Some(tap) = service.tap.get_tap_by_name(&TapName::from(name.to_string())).await? {
+    if let Some(tap) = service
+        .tap
+        .get_tap_by_name(&TapName::from(name.to_string()))
+        .await?
+    {
         Ok(tap.id)
     } else {
         Err(CoreError::NotFound(format!("Tap '{}' not found.", name)).into())
@@ -172,12 +176,11 @@ async fn do_play<'a>(
 }
 
 const CONGRATS: &[&str] = &[
-    "결혼 축하해요! 행복하게 사세요 🎉",
-    "두 분의 새로운 시작을 진심으로 축하드립니다!",
-    "오늘부터 둘이서 하나로! 평생 행복하세요!",
-    "새 출발을 진심으로 축하드려요! 늘 웃음 가득하길 바랍니다.",
-    "결혼을 진심으로 축하합니다! 앞으로도 함께 행복하세요!",
-    "사랑이 영원히 이어지길 바랍니다. 축하해요!",
+    "신부, 신부, 입장!",
+    "좋은사랑하세요",
+    "이쁜사랑하세요",
+    "저랑 결혼하시게요...?",
+    "쟤네 둘이 이제서야 결혼하네",
 ];
 
 /// Play the wedding song (easter egg).
