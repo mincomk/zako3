@@ -21,6 +21,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { ApiTokenItem } from '@/components/tap/api-token-item'
 import { CreateApiTokenDialog } from '@/components/tap/create-api-token-dialog'
+import { CopyableId } from '@/components/tap/copyable-id'
 
 export const TapApiKeysPage = () => {
     const { t } = useTranslation()
@@ -75,6 +76,10 @@ export const TapApiKeysPage = () => {
             <div>
                 <h1 className="text-2xl font-semibold">{t('taps.settings.apiAccess')}</h1>
                 <p className="text-muted-foreground">{t('taps.settings.apiAccessDescription')}</p>
+                <div className="mt-1 flex items-center gap-2 text-sm">
+                    <span className="text-muted-foreground">{t('taps.tapId')}</span>
+                    <CopyableId id={tapId!} />
+                </div>
             </div>
 
             <Card>
