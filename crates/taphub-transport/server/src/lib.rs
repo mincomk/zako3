@@ -59,6 +59,7 @@ impl TransportServer {
 
         if let Ok(var) = std::env::var("PF_INITIAL_BACKPRESSURE_CREDITS") {
             if let Ok(credits) = var.parse::<usize>() {
+                tracing::info!("Setting initial backpressure credits to {}", credits);
                 protofish_config.mani_config.initial_backpressure_credits = credits;
             }
         }

@@ -35,7 +35,7 @@ impl TransportClient {
 
         let mut protofish_config = ProtofishConfig::default();
         protofish_config.handshake_timeout = Duration::from_secs(10);
-        protofish_config.mani_config.backpressure_credit_batch_size = 1;
+        protofish_config.mani_config.backpressure_credit_batch_size = 10;
 
         let config = ClientConfig {
             bind_address: bind_addr,

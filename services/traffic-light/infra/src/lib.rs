@@ -30,6 +30,14 @@ impl std::fmt::Display for RegistrationError {
     }
 }
 
+fn normalize_url(addr: &str) -> String {
+    if addr.starts_with("http://") || addr.starts_with("https://") {
+        addr.to_string()
+    } else {
+        format!("http://{}", addr)
+    }
+}
+
 /// Validate a listen address format before registration.
 /// Accepts formats like "127.0.0.1:8090" or "http://127.0.0.1:8090".
 fn validate_listen_addr(addr: &str) -> Result<(), RegistrationError> {
@@ -88,6 +96,9 @@ fn validate_listen_addr(addr: &str) -> Result<(), RegistrationError> {
 pub struct AeRegistry {
     // Map from (WorkerId, AeId) to the jsonrpsee HTTP client pointing to that AE's listen_addr
     clients: DashMap<(WorkerId, AeId), jsonrpsee::http_client::HttpClient>,
+    // Stable mapping from normalized listen_addr URL to WorkerId, so re-registrations from the
+    // same address always land on the same worker instead of drifting via round-robin.
+    addr_to_worker: DashMap<String, WorkerId>,
     state: Arc<RwLock<ZakoState>>,
     token_pool: Vec<DiscordToken>,
     token_cursor: AtomicUsize,
@@ -100,6 +111,7 @@ impl AeRegistry {
     ) -> anyhow::Result<Self> {
         Ok(Self {
             clients: DashMap::new(),
+            addr_to_worker: DashMap::new(),
             state,
             token_pool,
             token_cursor: AtomicUsize::new(0),
@@ -120,20 +132,42 @@ impl AeRegistry {
 
     /// Register an AE that advertises itself at listen_addr. Picks the next token from the pool.
     /// Returns the assigned token. Evicts stale entries and updates state.
+    ///
+    /// If this address was previously registered, the same worker_id (and thus the same bot token)
+    /// is reused instead of round-robining to a new one. This prevents worker_id drift on AE
+    /// restart, which would otherwise leave stale sessions cached under the old worker_id.
     pub async fn register(&self, listen_addr: String) -> Result<String, RegistrationError> {
         // Validate address before consuming a token from the pool
         validate_listen_addr(&listen_addr)?;
 
-        let token = self.pick_next_token();
-        self.register_with_token(token.clone(), listen_addr).await?;
+        let url = normalize_url(&listen_addr);
+
+        // If this address already has a stable worker assignment, reuse its token rather than
+        // round-robining to a different worker_id on every restart.
+        let token = if let Some(worker_id) = self.addr_to_worker.get(&url).map(|e| *e) {
+            let state = self.state.read().await;
+            state
+                .workers
+                .get(&worker_id)
+                .map(|w| w.discord_token.clone())
+                .ok_or(RegistrationError::TokenNotFound)?
+        } else {
+            self.pick_next_token()
+        };
+
+        self.register_with_token(token.clone(), listen_addr, true).await?;
         Ok(token.0)
     }
 
     /// Register an AE with a specific token. Internal method.
+    /// `evict_sessions` should be `true` only for fresh registrations (AE restart) so that
+    /// stale TL-cached sessions are cleared. Heartbeats must pass `false` — they refresh the
+    /// client connection without invalidating active sessions.
     async fn register_with_token(
         &self,
         token: DiscordToken,
         listen_addr: String,
+        evict_sessions: bool,
     ) -> Result<(), RegistrationError> {
         // Find the WorkerId for this token
         let worker_id = {
@@ -146,12 +180,7 @@ impl AeRegistry {
                 .ok_or(RegistrationError::TokenNotFound)?
         };
 
-        // Ensure the URL has a scheme; if it's just host:port, prepend http://
-        let url = if listen_addr.starts_with("http://") || listen_addr.starts_with("https://") {
-            listen_addr.clone()
-        } else {
-            format!("http://{}", listen_addr)
-        };
+        let url = normalize_url(&listen_addr);
 
         // Build the HTTP client to communicate with the AE
         let http_client = HttpClientBuilder::default()
@@ -174,7 +203,7 @@ impl AeRegistry {
         // Assign the AE ID 1 (all stale ones are evicted, so we reuse ID 1)
         let ae_id = AeId(1);
 
-        // Remove stale ae_ids from worker's connected list in state
+        // Remove stale ae_ids from state, and sessions if this is a fresh registration
         if !stale_ae_ids.is_empty() {
             let mut state = self.state.write().await;
             if let Some(worker) = state.workers.get_mut(&worker_id) {
@@ -182,7 +211,20 @@ impl AeRegistry {
                     .connected_ae_ids
                     .retain(|id| !stale_ae_ids.iter().any(|ae| ae.0 == *id));
             }
+            // Only evict sessions on fresh `register()` calls, not heartbeats. Heartbeats refresh
+            // the client connection but the AE still owns its sessions; evicting here would cause
+            // reconcile to see discord=1/cache=0 and kick the bot every heartbeat cycle.
+            if evict_sessions {
+                for stale_ae_id in &stale_ae_ids {
+                    state
+                        .sessions
+                        .retain(|route, _| !(route.worker_id == worker_id && route.ae_id == *stale_ae_id));
+                }
+            }
         }
+
+        // Record the stable addr→worker mapping for future re-registrations from this address.
+        self.addr_to_worker.insert(url, worker_id);
 
         // Insert the new client
         self.clients.insert((worker_id, ae_id), http_client);
@@ -215,7 +257,7 @@ impl AeRegistry {
         listen_addr: String,
     ) -> Result<(), RegistrationError> {
         validate_listen_addr(&listen_addr)?;
-        self.register_with_token(DiscordToken(token), listen_addr)
+        self.register_with_token(DiscordToken(token), listen_addr, false)
             .await
     }
 }
