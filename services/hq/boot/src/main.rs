@@ -5,6 +5,8 @@ use tokio::net::TcpListener;
 use tokio::sync::broadcast;
 use tracing::info;
 
+mod bridge;
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     dotenvy::dotenv().ok();
@@ -33,27 +35,13 @@ async fn main() -> anyhow::Result<()> {
     // Broadcast channel for stats events — fired whenever a tap processes an audio request.
     let (stats_tx, _) = broadcast::channel::<()>(128);
 
-    // Bridge Redis history channel to stats_tx for SSE.
-    let stats_tx2 = stats_tx.clone();
-    let redis_url2 = config.redis_url.clone();
-    tokio::spawn(async move {
-        match zako3_states::RedisPubSub::new(&redis_url2).await {
-            Ok(pubsub) => match pubsub.subscribe_history().await {
-                Ok(stream) => {
-                    use futures_util::StreamExt;
-                    let mut stream = Box::pin(stream);
-                    while stream.next().await.is_some() {
-                        let _ = stats_tx2.send(());
-                    }
-                }
-                Err(e) => {
-                    tracing::error!(%e, "Failed to subscribe to Redis history channel for stats")
-                }
-            },
-            Err(e) => tracing::error!(%e, "Failed to connect Redis PubSub for stats bridge"),
-        }
-    });
-    info!("Stats SSE bridged from Redis history channel");
+    // Bridge Redis history channel to both stats_tx and event_tx for SSE.
+    tokio::spawn(bridge::run_history_bridge(
+        config.redis_url.clone(),
+        event_tx.clone(),
+        stats_tx.clone(),
+    ));
+    info!("History bridge started (stats SSE + playback SSE)");
 
     let backend_address = config.backend_address.clone();
     let service_backend = service.clone();
