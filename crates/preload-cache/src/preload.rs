@@ -1,18 +1,37 @@
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use bytes::Bytes;
+use tokio::io::BufWriter;
 use tokio::{
     fs,
     io::{self, AsyncReadExt, AsyncWriteExt, BufReader},
-    sync::mpsc,
+    sync::{Notify, mpsc},
+    time::Duration,
 };
 use tracing::warn;
 
 use crate::types::{NextFrame, PreloadId};
 
-// ---------------------------------------------------------------------------
-// AudioPreload — file-backed Opus frame writer
-// ---------------------------------------------------------------------------
+pub struct WriteSignal {
+    pub notify: Notify,
+    pub done: AtomicBool,
+}
+
+impl WriteSignal {
+    fn new() -> Arc<Self> {
+        Arc::new(Self {
+            notify: Notify::new(),
+            done: AtomicBool::new(false),
+        })
+    }
+
+    fn finish(&self) {
+        self.done.store(true, Ordering::Release);
+        self.notify.notify_one();
+    }
+}
 
 pub struct AudioPreload {
     dir: PathBuf,
@@ -21,7 +40,10 @@ pub struct AudioPreload {
 
 impl AudioPreload {
     pub fn new(dir: PathBuf, max_file_bytes: Option<u64>) -> Self {
-        Self { dir, max_file_bytes }
+        Self {
+            dir,
+            max_file_bytes,
+        }
     }
 
     pub fn frame_path(&self, id: PreloadId) -> PathBuf {
@@ -33,11 +55,27 @@ impl AudioPreload {
     }
 
     /// Spawns a task that drains `stream` and writes frames to disk.
-    /// Returns immediately. Any I/O error during writing deletes both files.
-    pub fn preload(&self, id: PreloadId, stream: mpsc::Receiver<Bytes>) {
+    /// Returns a `WriteSignal` that fires when the file is ready to read and after each frame.
+    pub fn preload(&self, id: PreloadId, stream: mpsc::Receiver<Bytes>) -> Arc<WriteSignal> {
+        let signal = WriteSignal::new();
         let frame_path = self.frame_path(id);
         let lock_path = self.lock_path(id);
-        tokio::spawn(write_task(frame_path, lock_path, stream, self.max_file_bytes));
+
+        tracing::info!(
+            "started preload write task for id {}. frame_path: {:?}, lock_path: {:?}",
+            id.0,
+            frame_path,
+            lock_path
+        );
+
+        tokio::spawn(write_task(
+            frame_path,
+            lock_path,
+            stream,
+            self.max_file_bytes,
+            Arc::clone(&signal),
+        ));
+        signal
     }
 
     /// Deletes the frame file and lock file for `id` if they exist.
@@ -47,28 +85,44 @@ impl AudioPreload {
         Ok(())
     }
 
-    /// Opens a reader for `id`. Returns `None` if the frame file doesn't exist yet.
+    /// Opens a reader for `id` with no signal (returns `Done` on EOF).
+    /// Returns `None` if the frame file doesn't exist yet.
     pub async fn open_reader(&self, id: PreloadId) -> Option<PreloadReader> {
-        let frame_path = self.frame_path(id);
-        let lock_path = self.lock_path(id);
-        let file = fs::File::open(&frame_path).await.ok()?;
-        Some(PreloadReader { file: BufReader::new(file), lock_path })
+        let file = fs::File::open(&self.frame_path(id)).await.ok()?;
+        Some(PreloadReader {
+            file: BufReader::new(file),
+            signal: None,
+        })
+    }
+
+    /// Opens a reader for `id` with a `WriteSignal` for event-driven frame waiting.
+    /// Returns `None` if the frame file doesn't exist yet.
+    pub async fn open_reader_with_signal(
+        &self,
+        id: PreloadId,
+        signal: Arc<WriteSignal>,
+    ) -> Option<PreloadReader> {
+        let file = fs::File::open(&self.frame_path(id)).await.ok()?;
+        Some(PreloadReader {
+            file: BufReader::new(file),
+            signal: Some(signal),
+        })
     }
 }
-
-// ---------------------------------------------------------------------------
-// Write task
-// ---------------------------------------------------------------------------
 
 async fn write_task(
     frame_path: PathBuf,
     lock_path: PathBuf,
     mut stream: mpsc::Receiver<Bytes>,
     max_file_bytes: Option<u64>,
+    signal: Arc<WriteSignal>,
 ) {
     let result = async {
-        let mut file = fs::File::create(&frame_path).await?;
+        let mut file = BufWriter::new(fs::File::create(&frame_path).await?);
         fs::File::create(&lock_path).await?;
+
+        // File is created — wake the finalization task so it can open a reader.
+        signal.notify.notify_one();
 
         let mut total_bytes: u64 = 0;
         while let Some(frame) = stream.recv().await {
@@ -86,11 +140,28 @@ async fn write_task(
             let len = frame.len() as u32;
             file.write_all(&len.to_le_bytes()).await?;
             file.write_all(&frame).await?;
+            file.flush().await?;
+
+            // Wake reader for each new frame.
+            signal.notify.notify_one();
+
+            tracing::debug!(
+                "wrote frame to preload. frame_len: {}, total_bytes: {}, frame_path: {:?}, stream_len: {}",
+                len,
+                total_bytes,
+                frame_path,
+                stream.len(),
+            );
         }
 
         file.flush().await?;
-        file.sync_data().await?;
         fs::remove_file(&lock_path).await?;
+
+        tracing::info!(
+            "preload write task completed successfully. frame_path: {:?}, lock_path: {:?}",
+            frame_path,
+            lock_path
+        );
 
         io::Result::Ok(())
     }
@@ -101,15 +172,14 @@ async fn write_task(
         let _ = fs::remove_file(&frame_path).await;
         let _ = fs::remove_file(&lock_path).await;
     }
-}
 
-// ---------------------------------------------------------------------------
-// PreloadReader
-// ---------------------------------------------------------------------------
+    // Always signal done so readers don't wait forever.
+    signal.finish();
+}
 
 pub struct PreloadReader {
     pub(crate) file: BufReader<fs::File>,
-    pub(crate) lock_path: PathBuf,
+    pub(crate) signal: Option<Arc<WriteSignal>>,
 }
 
 impl PreloadReader {
@@ -122,13 +192,19 @@ impl PreloadReader {
                 self.file.read_exact(&mut buf).await?;
                 Ok(NextFrame::Frame(Bytes::from(buf)))
             }
-            Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
-                if self.lock_path.exists() {
-                    Ok(NextFrame::Pending)
-                } else {
-                    Ok(NextFrame::Done)
+            Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => match &self.signal {
+                None => Ok(NextFrame::Done),
+                Some(sig) => {
+                    if sig.done.load(Ordering::Acquire) {
+                        Ok(NextFrame::Done)
+                    } else {
+                        tokio::time::timeout(Duration::from_millis(500), sig.notify.notified())
+                            .await
+                            .ok();
+                        Ok(NextFrame::Pending)
+                    }
                 }
-            }
+            },
             Err(e) => Err(e),
         }
     }
@@ -152,17 +228,15 @@ impl PreloadReader {
                 cache,
             } => {
                 let opus_path = preload.frame_path(preload_id);
-                cache.store_from_path(item, metadatas, cache_key, &opus_path).await?;
+                cache
+                    .store_from_path(item, metadatas, cache_key, &opus_path)
+                    .await?;
                 preload.delete_preload(preload_id).await?;
             }
         }
         Ok(())
     }
 }
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 async fn remove_if_exists(path: &Path) -> io::Result<()> {
     match fs::remove_file(path).await {

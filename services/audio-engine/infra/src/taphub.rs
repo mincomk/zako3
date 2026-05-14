@@ -65,11 +65,16 @@ impl TapHubService for RealTapHubService {
     }
 
     #[instrument(skip(self), fields(tap_id = %request.tap_id.0))]
-    async fn preload_audio(&self, mut request: CachedAudioRequest) -> ZakoResult<AudioMetaResponse> {
+    async fn preload_audio(
+        &self,
+        mut request: CachedAudioRequest,
+    ) -> ZakoResult<AudioMetaResponse> {
         let cx = tracing::Span::current().context();
         global::get_text_map_propagator(|p| p.inject_context(&cx, &mut request.headers));
 
         let start = std::time::Instant::now();
+
+        tracing::info!("Preload requested for tap_id {}", request.tap_id.0);
 
         let client = self.get_client().await?;
         let result = client

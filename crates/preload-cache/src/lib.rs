@@ -5,5 +5,5 @@ pub mod types;
 
 pub use cache::{AudioCache, FileAudioCache, PreloadReadEndAction};
 pub use db::{CacheDb, DbEntry};
-pub use preload::{AudioPreload, PreloadReader};
+pub use preload::{AudioPreload, PreloadReader, WriteSignal};
 pub use types::{CacheEntry, CacheEntryKind, NextFrame, PreloadId};

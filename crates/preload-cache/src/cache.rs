@@ -23,10 +23,6 @@ use crate::{
     types::{CacheEntry, CacheEntryKind},
 };
 
-// ---------------------------------------------------------------------------
-// PreloadReadEndAction
-// ---------------------------------------------------------------------------
-
 pub enum PreloadReadEndAction {
     /// Delete the preload files when reading completes successfully.
     Delete,
@@ -38,10 +34,6 @@ pub enum PreloadReadEndAction {
         cache: Arc<dyn AudioCache>,
     },
 }
-
-// ---------------------------------------------------------------------------
-// AudioCache trait
-// ---------------------------------------------------------------------------
 
 #[async_trait]
 pub trait AudioCache: Send + Sync {
@@ -84,10 +76,6 @@ pub trait AudioCache: Send + Sync {
     /// Delete cached files for the given key.
     async fn delete(&self, tap_id: &TapId, key: &AudioCacheItemKey) -> io::Result<()>;
 }
-
-// ---------------------------------------------------------------------------
-// FileAudioCache
-// ---------------------------------------------------------------------------
 
 pub struct FileAudioCache {
     dir: PathBuf,
@@ -336,7 +324,7 @@ impl AudioCache for FileAudioCache {
 
         Some(PreloadReader {
             file: tokio::io::BufReader::new(file),
-            lock_path: PathBuf::from(""),
+            signal: None,
         })
     }
 
@@ -351,10 +339,7 @@ impl AudioCache for FileAudioCache {
             return None;
         }
         // Full sidecar (with metadatas and cache_policy) is in the in-memory index.
-        let sidecar = self
-            .db
-            .get_sidecar(tap_id.to_string(), key_json)
-            .await?;
+        let sidecar = self.db.get_sidecar(tap_id.to_string(), key_json).await?;
         let item_key: AudioCacheItemKey = serde_json::from_str(&entry.cache_key).ok()?;
         let expire_at = entry
             .expire_at

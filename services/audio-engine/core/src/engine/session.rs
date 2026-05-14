@@ -116,6 +116,7 @@ impl SessionControl {
         metrics::record_track_lifecycle("queued", &normalize_queue_name(&queue_name_for_metric));
 
         self.reconcile().await?;
+        self.preload_if_possible(track_id).await?;
 
         Ok(track_id)
     }
@@ -274,6 +275,7 @@ impl SessionControl {
         let current_track = &music_tracks[0];
         let current_track_id = current_track.track_id;
         let queue_name = current_track.queue_name.clone();
+        let next_track_id = music_tracks[1].track_id;
 
         tracing::info!(track_id = %current_track_id, "Skipping to next track");
 
@@ -291,6 +293,7 @@ impl SessionControl {
         metrics::record_track_lifecycle("skip", &normalize_queue_name(&queue_name));
 
         self.reconcile().await?;
+        self.preload_if_possible(next_track_id).await?;
 
         Ok(())
     }
