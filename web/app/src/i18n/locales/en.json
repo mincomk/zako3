@@ -612,6 +612,7 @@
       }
     },
     "voice": {
+      "allQueuesEmpty": "It's quiet. How about some music?",
       "history": "History",
       "noActiveSession": "No active session in this channel.",
       "noRecentActions": "No recent actions.",

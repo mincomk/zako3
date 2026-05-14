@@ -611,6 +611,7 @@
       }
     },
     "voice": {
+      "allQueuesEmpty": "조용하네요. 신나는 노래 한 곡 어때요?",
       "history": "이력",
       "noActiveSession": "이 채널에 활성 세션이 없습니다.",
       "noRecentActions": "최근 작업이 없습니다.",
