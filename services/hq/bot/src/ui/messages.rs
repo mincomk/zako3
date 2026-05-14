@@ -16,10 +16,6 @@ pub fn bot_left() -> &'static str {
     "음성 채널에서 나왔어요."
 }
 
-pub fn bot_moved(channel_id: ChannelId) -> String {
-    format!("음성 채널을 <#{channel_id}>로 옮겼어요!")
-}
-
 pub fn volume_set(level: u8) -> String {
     format!("음량을 **{level}%**로 설정할게요.")
 }

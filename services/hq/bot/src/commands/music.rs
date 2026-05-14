@@ -16,6 +16,50 @@ pub enum StopScope {
     Queue,
 }
 
+/// Resolves the voice channel to play in, auto-joining the bot if it isn't already there.
+async fn resolve_play_channel(
+    ctx: Context<'_>,
+    channel: Option<serenity::GuildChannel>,
+) -> Result<(GuildId, ChannelId), Error> {
+    let (guild_id, serenity_guild_id, user_serenity_cid) = {
+        let guild = ctx
+            .guild()
+            .ok_or_else(|| Error::Other("이 명령어는 서버에서만 사용할 수 있어요.".to_string()))?;
+        let user_cid = guild
+            .voice_states
+            .get(&ctx.author().id)
+            .and_then(|vs| vs.channel_id);
+        (GuildId::from(guild.id.get()), guild.id, user_cid)
+    };
+
+    let channel_id = if let Some(ch) = channel {
+        ChannelId::from(ch.id.get())
+    } else {
+        let user_cid = user_serenity_cid
+            .map(|cid| ChannelId::from(cid.get()))
+            .ok_or(Error::NotInVoiceChannel)?;
+        let sessions = ctx
+            .data()
+            .service
+            .audio_engine
+            .get_sessions_in_guild(guild_id)
+            .await?;
+        if !sessions.iter().any(|s| s.channel_id == user_cid) {
+            crate::commands::voice::join_channel(
+                &ctx.data().service,
+                ctx.serenity_context(),
+                guild_id,
+                serenity_guild_id,
+                user_cid,
+            )
+            .await?;
+        }
+        user_cid
+    };
+
+    Ok((guild_id, channel_id))
+}
+
 /// Search and play audio.
 #[poise::command(
     slash_command,
@@ -36,36 +80,7 @@ pub async fn play(
     #[channel_types("Voice")]
     channel: Option<serenity::GuildChannel>,
 ) -> Result<(), Error> {
-    // Extract all non-Send guild data before the first await.
-    let (guild_id, user_serenity_cid) = {
-        let guild = ctx
-            .guild()
-            .ok_or_else(|| Error::Other("이 명령어는 서버에서만 사용할 수 있어요.".to_string()))?;
-        let user_cid = guild
-            .voice_states
-            .get(&ctx.author().id)
-            .and_then(|vs| vs.channel_id);
-        (GuildId::from(guild.id.get()), user_cid)
-    };
-
-    let channel_id = if let Some(ch) = channel {
-        ChannelId::from(ch.id.get())
-    } else {
-        let user_cid = user_serenity_cid
-            .map(|cid| ChannelId::from(cid.get()))
-            .ok_or(Error::NotInVoiceChannel)?;
-        let sessions = ctx
-            .data()
-            .service
-            .audio_engine
-            .get_sessions_in_guild(guild_id)
-            .await?;
-        sessions
-            .into_iter()
-            .find(|s| s.channel_id == user_cid)
-            .map(|s| s.channel_id)
-            .ok_or(Error::UserNotInSession)?
-    };
+    let (guild_id, channel_id) = resolve_play_channel(ctx, channel).await?;
 
     let source_name = source.unwrap_or_else(|| "youtube".to_string());
     let tap_id = resolve_tap_id(ctx, &source_name).await?;
@@ -154,6 +169,52 @@ async fn do_play<'a>(
     }
 
     Ok(poise::CreateReply::default().content(format!("대기열에 추가했어요: *{query}*")))
+}
+
+const CONGRATS: &[&str] = &[
+    "결혼 축하해요! 행복하게 사세요 🎉",
+    "두 분의 새로운 시작을 진심으로 축하드립니다!",
+    "오늘부터 둘이서 하나로! 평생 행복하세요!",
+    "새 출발을 진심으로 축하드려요! 늘 웃음 가득하길 바랍니다.",
+    "결혼을 진심으로 축하합니다! 앞으로도 함께 행복하세요!",
+    "사랑이 영원히 이어지길 바랍니다. 축하해요!",
+];
+
+/// Play the wedding song (easter egg).
+#[poise::command(
+    slash_command,
+    name_localized("ko", "결혼"),
+    description_localized("en-US", "Play the wedding song"),
+    description_localized("ko", "결혼 축하 음악 재생")
+)]
+pub async fn wedding(ctx: Context<'_>) -> Result<(), Error> {
+    let (guild_id, channel_id) = resolve_play_channel(ctx, None).await?;
+    let tap_id = resolve_tap_id(ctx, "wedding").await?;
+    let queue_name = QueueName::from(MUSIC_QUEUE.to_string());
+    let discord_user_id = DiscordUserId::from(ctx.author().id.get().to_string());
+
+    ctx.data()
+        .service
+        .audio_engine
+        .play(
+            guild_id,
+            channel_id,
+            queue_name,
+            tap_id,
+            AudioRequestString::from("wedding".to_string()),
+            Volume::from(1.0f32),
+            discord_user_id,
+        )
+        .await?;
+
+    let idx = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.subsec_nanos() as usize)
+        .unwrap_or(0)
+        % CONGRATS.len();
+    let msg = CONGRATS[idx];
+    ctx.say(msg).await?;
+    Ok(())
 }
 
 /// Stop playback.

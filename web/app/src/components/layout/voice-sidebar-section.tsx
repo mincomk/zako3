@@ -26,12 +26,18 @@ export const VoiceSidebarSection = () => {
         return null
     }
 
+    const sortedGuilds = [...guilds].sort((a, b) => {
+        const aActive = a.activeChannelId ? 1 : 0
+        const bActive = b.activeChannelId ? 1 : 0
+        return bActive - aActive
+    })
+
     return (
         <SidebarGroup>
             <SidebarGroupLabel>Guilds</SidebarGroupLabel>
             <SidebarGroupContent>
                 <SidebarMenu>
-                    {guilds.map((guild) => {
+                    {sortedGuilds.map((guild) => {
                         const voiceUrl = guild.activeChannelId
                             ? ROUTES.VOICE_CHANNEL(guild.guildId, guild.activeChannelId)
                             : null

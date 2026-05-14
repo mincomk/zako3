@@ -8,6 +8,25 @@ use hq_types::{
 };
 use poise::serenity_prelude as serenity;
 
+/// Join a voice channel, play a bot-join announcement, and track the intent.
+///
+/// This is the single authoritative join entry point — it combines the audio-engine
+/// join+announcement with `intended_vc` tracking so callers can't do one without the other.
+pub(crate) async fn join_channel(
+    service: &Service,
+    serenity_ctx: &serenity::Context,
+    guild_id: GuildId,
+    serenity_guild_id: serenity::GuildId,
+    channel_id: ChannelId,
+) -> CoreResult<()> {
+    bot_join_and_announce(service, serenity_ctx, guild_id, serenity_guild_id, channel_id).await?;
+    service
+        .intended_vc
+        .add(u64::from(guild_id), u64::from(channel_id))
+        .await?;
+    Ok(())
+}
+
 /// Join a voice channel and play a bot-join announcement.
 pub(crate) async fn bot_join_and_announce(
     service: &Service,
@@ -99,7 +118,7 @@ pub async fn join(
     };
 
     let service = &ctx.data().service;
-    bot_join_and_announce(
+    join_channel(
         service,
         ctx.serenity_context(),
         guild_id,
@@ -107,10 +126,6 @@ pub async fn join(
         channel_id,
     )
     .await?;
-    service
-        .intended_vc
-        .add(u64::from(guild_id), u64::from(channel_id))
-        .await?;
 
     ctx.say(ui::messages::bot_joined(u64::from(channel_id).into()))
         .await?;
@@ -148,49 +163,3 @@ pub async fn leave(
     Ok(())
 }
 
-/// Move the bot to a different voice channel.
-#[poise::command(
-    slash_command,
-    name_localized("ko", "이동"),
-    description_localized("en-US", "Move the bot to a different voice channel"),
-    description_localized("ko", "봇을 다른 음성 채널로 이동")
-)]
-pub async fn move_to(
-    ctx: Context<'_>,
-    #[description = "The voice channel to move to"]
-    #[description_localized("ko", "이동할 음성 채널")]
-    #[channel_types("Voice")]
-    channel: serenity::GuildChannel,
-) -> Result<(), Error> {
-    let session = util::resolve_session(ctx, None).await?;
-    let new_serenity_guild_id = channel.guild_id;
-    let new_channel_id = ChannelId::from(channel.id.get());
-
-    let service = &ctx.data().service;
-
-    // Remove old channel from intended_vc, leave it, then join+announce new channel.
-    service
-        .intended_vc
-        .remove(u64::from(session.guild_id), u64::from(session.channel_id))
-        .await?;
-    service
-        .audio_engine
-        .leave(session.guild_id, session.channel_id)
-        .await?;
-    bot_join_and_announce(
-        service,
-        ctx.serenity_context(),
-        session.guild_id,
-        new_serenity_guild_id,
-        new_channel_id,
-    )
-    .await?;
-    service
-        .intended_vc
-        .add(u64::from(session.guild_id), u64::from(new_channel_id))
-        .await?;
-
-    ctx.say(ui::messages::bot_moved(u64::from(new_channel_id).into()))
-        .await?;
-    Ok(())
-}
