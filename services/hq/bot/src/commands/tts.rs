@@ -1,5 +1,7 @@
-use crate::{ui, util, util::VoiceStateExt, Context, Error};
+use crate::{ui, util, util::VoiceStateExt, CachedNames, Context, Error};
 use hq_core::{service::UserVoiceInfo, CoreError};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 use hq_types::{
     hq::settings::{PartialUserSettings, UserSettingsField},
     hq::{DiscordUserId, TapId, TapName},
@@ -285,52 +287,114 @@ pub async fn skip(
     Ok(())
 }
 
-async fn autocomplete_provider(
-    ctx: Context<'_>,
-    partial: &str,
-) -> Vec<String> {
-    let service = &ctx.data().service;
-    let discord_id = ctx.author().id.to_string();
+/// How long a cached tap-name list stays fresh before autocomplete refetches it.
+const AUTOCOMPLETE_CACHE_TTL: Duration = Duration::from_secs(30);
+/// Soft cap on cached users; exceeding it triggers a lazy sweep of expired entries.
+const MAX_AUTOCOMPLETE_CACHE_ENTRIES: usize = 10_000;
 
-    let user_id = match service
-        .tap
-        .get_user_by_discord_id(&discord_id)
-        .await
-    {
-        Ok(Some(u)) => Some(u.id),
-        Ok(None) => None,
-        Err(e) => {
-            tracing::error!("Failed to get user for autocomplete: {:?}", e);
-            return vec![];
-        }
-    };
-
-    let taps = match service
-        .tap
-        .list_all_paginated(
-            user_id,
-            None,
-            None,
-            Some(partial.to_string()),
-            None,
-            Some(true),
-            None,
-            Some(25),
-        )
-        .await
-    {
-        Ok(t) => t,
-        Err(e) => {
-            tracing::error!("Failed to list taps for autocomplete: {:?}", e);
-            return vec![];
-        }
-    };
-
-    taps.data
+/// Case-insensitive substring filter over cached tap names, capped at Discord's 25
+/// autocomplete-choice limit. Mirrors the server-side search in
+/// `hq_core::service::tap::list_all_paginated`.
+fn filter_tap_names(names: &[String], partial: &str) -> Vec<String> {
+    let q = partial.to_lowercase();
+    names
         .iter()
-        .map(|t| t.tap.name.to_string())
+        .filter(|n| n.to_lowercase().contains(&q))
         .take(25)
+        .cloned()
         .collect()
+}
+
+async fn autocomplete_provider(ctx: Context<'_>, partial: &str) -> Vec<String> {
+    let discord_id = ctx.author().id.to_string();
+    let cache = &ctx.data().provider_name_cache;
+
+    // Fast path: clone the Arc out and drop the DashMap guard before any await.
+    let cached = cache.get(&discord_id).and_then(|e| {
+        (e.fetched_at.elapsed() < AUTOCOMPLETE_CACHE_TTL).then(|| e.names.clone())
+    });
+
+    let names = match cached {
+        Some(names) => names,
+        None => {
+            let service = &ctx.data().service;
+            let user_id = match service.tap.get_user_by_discord_id(&discord_id).await {
+                Ok(Some(u)) => Some(u.id),
+                Ok(None) => None,
+                Err(e) => {
+                    tracing::error!("Failed to get user for autocomplete: {:?}", e);
+                    return vec![];
+                }
+            };
+
+            // Fetch the full accessible list once (search=None); we filter `partial`
+            // client-side, matching the server-side substring search semantics.
+            let taps = match service
+                .tap
+                .list_all_paginated(user_id, None, None, None, None, Some(true), None, None)
+                .await
+            {
+                Ok(t) => t,
+                Err(e) => {
+                    tracing::error!("Failed to list taps for autocomplete: {:?}", e);
+                    return vec![];
+                }
+            };
+
+            let names = Arc::new(
+                taps.data
+                    .iter()
+                    .map(|t| t.tap.name.to_string())
+                    .collect::<Vec<_>>(),
+            );
+
+            // Bound growth: sweep expired entries when the map gets large.
+            if cache.len() > MAX_AUTOCOMPLETE_CACHE_ENTRIES {
+                cache.retain(|_, v| v.fetched_at.elapsed() < AUTOCOMPLETE_CACHE_TTL);
+            }
+            cache.insert(
+                discord_id,
+                CachedNames {
+                    names: names.clone(),
+                    fetched_at: Instant::now(),
+                },
+            );
+            names
+        }
+    };
+
+    filter_tap_names(&names, partial)
+}
+
+#[cfg(test)]
+mod autocomplete_tests {
+    use super::filter_tap_names;
+
+    fn names() -> Vec<String> {
+        ["Google", "OpenAI", "ElevenLabs", "google-ko"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect()
+    }
+
+    #[test]
+    fn matches_case_insensitively() {
+        let out = filter_tap_names(&names(), "goog");
+        assert_eq!(out, vec!["Google".to_string(), "google-ko".to_string()]);
+    }
+
+    #[test]
+    fn empty_partial_returns_all() {
+        let out = filter_tap_names(&names(), "");
+        assert_eq!(out.len(), names().len());
+    }
+
+    #[test]
+    fn caps_at_25() {
+        let many: Vec<String> = (0..100).map(|i| format!("voice{i}")).collect();
+        let out = filter_tap_names(&many, "voice");
+        assert_eq!(out.len(), 25);
+    }
 }
 
 /// Change your TTS voice.
