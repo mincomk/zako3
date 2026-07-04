@@ -294,7 +294,7 @@ const MAX_AUTOCOMPLETE_CACHE_ENTRIES: usize = 10_000;
 
 /// Case-insensitive substring filter over cached tap names, capped at Discord's 25
 /// autocomplete-choice limit. Mirrors the server-side search in
-/// `hq_core::service::tap::list_all_paginated`.
+/// `hq_core::service::tap::list_all_accessible`.
 fn filter_tap_names(names: &[String], partial: &str) -> Vec<String> {
     let q = partial.to_lowercase();
     names
@@ -329,11 +329,7 @@ async fn autocomplete_provider(ctx: Context<'_>, partial: &str) -> Vec<String> {
 
             // Fetch the full accessible list once (search=None); we filter `partial`
             // client-side, matching the server-side substring search semantics.
-            let taps = match service
-                .tap
-                .list_all_paginated(user_id, None, None, None, None, Some(true), None, None)
-                .await
-            {
+            let taps = match service.tap.list_all_accessible(user_id).await {
                 Ok(t) => t,
                 Err(e) => {
                     tracing::error!("Failed to list taps for autocomplete: {:?}", e);
@@ -342,8 +338,7 @@ async fn autocomplete_provider(ctx: Context<'_>, partial: &str) -> Vec<String> {
             };
 
             let names = Arc::new(
-                taps.data
-                    .iter()
+                taps.iter()
                     .map(|t| t.tap.name.to_string())
                     .collect::<Vec<_>>(),
             );
@@ -425,9 +420,8 @@ pub async fn voice(
 
     if let Some(ref tap_name) = provider {
         // Validate the tap exists and is accessible
-        let taps = service.tap.list_all_paginated(Some(user.id.clone()), None, None, None, None, Some(true), None, None).await?;
+        let taps = service.tap.list_all_accessible(Some(user.id.clone())).await?;
         let found = taps
-            .data
             .iter()
             .find(|t| t.tap.name.eq_ignore_ascii_case(tap_name));
 
@@ -469,8 +463,8 @@ pub async fn voice(
         ctx.say(ui::messages::voice_changed(tap_name)).await?;
     } else {
         // Show available voices
-        let taps = service.tap.list_all_paginated(Some(user.id), None, None, None, None, Some(true), None, None).await?;
-        let embed = ui::embeds::tap_list_embed(&taps.data);
+        let taps = service.tap.list_all_accessible(Some(user.id)).await?;
+        let embed = ui::embeds::tap_list_embed(&taps);
         ctx.send(
             poise::CreateReply::default()
                 .content("Choose a voice from your Taps:")

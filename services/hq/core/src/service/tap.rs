@@ -134,6 +134,51 @@ impl TapService {
         })
     }
 
+    /// Enrich a raw tap into a `TapWithAccessDto` (owner lookup + access check + dto map).
+    async fn enrich_tap(
+        &self,
+        tap: Tap,
+        user_id: Option<UserId>,
+    ) -> CoreResult<TapWithAccessDto> {
+        let owner = self
+            .user_repo
+            .find_by_id(tap.owner_id.clone())
+            .await?
+            .ok_or(CoreError::NotFound("Owner not found".to_string()))?;
+
+        let has_access = self.check_access(&tap, user_id).await;
+        let tap_dto = self.map_to_tap_dto(tap).await;
+
+        Ok(TapWithAccessDto {
+            tap: tap_dto,
+            has_access,
+            owner: UserSummaryDto {
+                id: owner.id.0.clone(),
+                username: owner.username.0.clone(),
+                avatar: owner.avatar_url.clone().unwrap_or_default(),
+            },
+        })
+    }
+
+    /// Returns every tap the user can access, unpaginated, sorted most-used first.
+    /// Used by the bot where the full list is required (autocomplete, validation,
+    /// listing) — unlike `list_all_paginated`, which caps results for API callers.
+    pub async fn list_all_accessible(
+        &self,
+        user_id: Option<UserId>,
+    ) -> CoreResult<Vec<TapWithAccessDto>> {
+        let taps = self.tap_repo.list_all().await?;
+        let mut out = Vec::new();
+        for tap in taps {
+            let dto = self.enrich_tap(tap, user_id.clone()).await?;
+            if dto.has_access {
+                out.push(dto);
+            }
+        }
+        out.sort_by(|a, b| b.tap.total_uses.cmp(&a.tap.total_uses));
+        Ok(out)
+    }
+
     pub async fn list_all_paginated(
         &self,
         user_id: Option<UserId>,
@@ -170,24 +215,7 @@ impl TapService {
         // 3. Enrich surviving taps
         let mut tap_dtos = Vec::new();
         for tap in taps {
-            let owner = self
-                .user_repo
-                .find_by_id(tap.owner_id.clone())
-                .await?
-                .ok_or(CoreError::NotFound("Owner not found".to_string()))?;
-
-            let has_access = self.check_access(&tap, user_id.clone()).await;
-            let tap_dto = self.map_to_tap_dto(tap).await;
-
-            tap_dtos.push(TapWithAccessDto {
-                tap: tap_dto,
-                has_access,
-                owner: UserSummaryDto {
-                    id: owner.id.0.clone(),
-                    username: owner.username.0.clone(),
-                    avatar: owner.avatar_url.clone().unwrap_or_default(),
-                },
-            });
+            tap_dtos.push(self.enrich_tap(tap, user_id.clone()).await?);
         }
 
         // 4. Filter by accessible
