@@ -200,6 +200,27 @@ impl TapService {
         Ok(out)
     }
 
+    /// Names of every tap the user can access, sorted alphabetically. Used by bot
+    /// autocomplete, which needs only names — so this skips the per-tap owner and
+    /// metrics enrichment that `list_all_accessible` performs (2 queries total,
+    /// independent of tap count).
+    pub async fn list_accessible_names(
+        &self,
+        user_id: Option<UserId>,
+    ) -> CoreResult<Vec<String>> {
+        let taps = self.tap_repo.list_all().await?;
+        let requester_discord_id = self.resolve_requester_discord_id(&user_id).await;
+        let mut names: Vec<String> = taps
+            .into_iter()
+            .filter(|t| {
+                Self::check_access_resolved(t, &user_id, requester_discord_id.as_deref())
+            })
+            .map(|t| t.name.0)
+            .collect();
+        names.sort();
+        Ok(names)
+    }
+
     pub async fn list_all_paginated(
         &self,
         user_id: Option<UserId>,

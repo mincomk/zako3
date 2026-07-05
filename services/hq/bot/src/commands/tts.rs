@@ -327,21 +327,16 @@ async fn autocomplete_provider(ctx: Context<'_>, partial: &str) -> Vec<String> {
                 }
             };
 
-            // Fetch the full accessible list once (search=None); we filter `partial`
-            // client-side, matching the server-side substring search semantics.
-            let taps = match service.tap.list_all_accessible(user_id).await {
-                Ok(t) => t,
+            // Fetch the full accessible name list once (search=None); we filter
+            // `partial` client-side, matching the server-side substring search
+            // semantics. Names-only avoids the per-tap owner/metrics enrichment.
+            let names = match service.tap.list_accessible_names(user_id).await {
+                Ok(names) => Arc::new(names),
                 Err(e) => {
                     tracing::error!("Failed to list taps for autocomplete: {:?}", e);
                     return vec![];
                 }
             };
-
-            let names = Arc::new(
-                taps.iter()
-                    .map(|t| t.tap.name.to_string())
-                    .collect::<Vec<_>>(),
-            );
 
             // Bound growth: sweep expired entries when the map gets large.
             if cache.len() > MAX_AUTOCOMPLETE_CACHE_ENTRIES {
