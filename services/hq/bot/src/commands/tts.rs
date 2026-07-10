@@ -291,6 +291,9 @@ pub async fn skip(
 const AUTOCOMPLETE_CACHE_TTL: Duration = Duration::from_secs(30);
 /// Soft cap on cached users; exceeding it triggers a lazy sweep of expired entries.
 const MAX_AUTOCOMPLETE_CACHE_ENTRIES: usize = 10_000;
+/// Max taps shown in the `/tts voice` picker embed — keeps the description under
+/// Discord's 4096-char limit (and matches the old paginated default of 20).
+const VOICE_LIST_MAX_ENTRIES: usize = 20;
 
 /// Case-insensitive substring filter over cached tap names, capped at Discord's 25
 /// autocomplete-choice limit. Mirrors the server-side search in
@@ -414,18 +417,14 @@ pub async fn voice(
         .await?;
 
     if let Some(ref tap_name) = provider {
-        // Validate the tap exists and is accessible
-        let taps = service.tap.list_all_accessible(Some(user.id.clone())).await?;
-        let found = taps
-            .iter()
-            .find(|t| t.tap.name.eq_ignore_ascii_case(tap_name));
+        // Validate the tap exists and is accessible; name-only lookup, no enrichment.
+        let found = service
+            .tap
+            .find_accessible_by_name(Some(user.id.clone()), tap_name)
+            .await?
+            .ok_or_else(|| CoreError::NotFound(format!("Voice '{}' not found.", tap_name)))?;
 
-        if found.is_none() {
-            return Err(CoreError::NotFound(format!("Voice '{}' not found.", tap_name)).into());
-        }
-
-        let found = found.unwrap();
-        let tap_id = TapId::from(found.tap.id.clone());
+        let tap_id = found.id;
         let partial = PartialUserSettings {
             tts_voice: UserSettingsField::Normal(Some(tap_id)),
             ..PartialUserSettings::empty()
@@ -457,8 +456,10 @@ pub async fn voice(
 
         ctx.say(ui::messages::voice_changed(tap_name)).await?;
     } else {
-        // Show available voices
-        let taps = service.tap.list_all_accessible(Some(user.id)).await?;
+        // Show available voices. The list is sorted most-used first; cap it so the
+        // embed description stays under Discord's 4096-char limit.
+        let mut taps = service.tap.list_all_accessible(Some(user.id)).await?;
+        taps.truncate(VOICE_LIST_MAX_ENTRIES);
         let embed = ui::embeds::tap_list_embed(&taps);
         ctx.send(
             poise::CreateReply::default()

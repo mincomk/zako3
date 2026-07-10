@@ -15,8 +15,10 @@ use zako3_states::TapHubStateService;
 
 /// Max taps enriched concurrently. Bounds the fan-out of per-tap backend calls so a
 /// large listing doesn't stampede Postgres/Timescale/Redis while still cutting the
-/// wall-clock latency of the previously-sequential enrichment loop.
-const ENRICH_CONCURRENCY: usize = 16;
+/// wall-clock latency of the previously-sequential enrichment loop. Must stay below
+/// the sqlx pool size (5, see `db::get_pool`) or a single listing call monopolizes
+/// every connection and starves other queries.
+const ENRICH_CONCURRENCY: usize = 4;
 
 #[derive(Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -219,6 +221,22 @@ impl TapService {
             .collect();
         names.sort();
         Ok(names)
+    }
+
+    /// Find a tap by name (ASCII case-insensitive) that the user can access, skipping
+    /// the per-tap owner/metrics enrichment — 2 queries total. Used by the bot to
+    /// validate a user-supplied voice name.
+    pub async fn find_accessible_by_name(
+        &self,
+        user_id: Option<UserId>,
+        name: &str,
+    ) -> CoreResult<Option<Tap>> {
+        let taps = self.tap_repo.list_all().await?;
+        let requester_discord_id = self.resolve_requester_discord_id(&user_id).await;
+        Ok(taps.into_iter().find(|t| {
+            t.name.0.eq_ignore_ascii_case(name)
+                && Self::check_access_resolved(t, &user_id, requester_discord_id.as_deref())
+        }))
     }
 
     pub async fn list_all_paginated(
@@ -645,12 +663,13 @@ impl TapService {
     pub async fn check_access(&self, tap: &Tap, user_id: Option<UserId>) -> bool {
         use hq_types::hq::TapPermission;
 
-        // Only whitelist/blacklist need the requester's discord id; resolve lazily so
-        // public/owner-only checks stay query-free, matching the previous behaviour.
+        // Only a non-owner requester against a whitelist/blacklist needs the discord
+        // id; every other case (public, owner-only, owner short-circuit) is
+        // query-free, matching the previous behaviour.
         let needs_discord = matches!(
             tap.permission,
             TapPermission::Whitelisted { .. } | TapPermission::Blacklisted { .. }
-        );
+        ) && user_id.as_ref().is_some_and(|uid| *uid != tap.owner_id);
         let requester_discord_id = if needs_discord {
             self.resolve_requester_discord_id(&user_id).await
         } else {
