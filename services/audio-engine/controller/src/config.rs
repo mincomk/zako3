@@ -18,6 +18,8 @@ pub struct AppConfig {
     pub taphub_sni: String,
     #[serde(default = "default_taphub_transport_cert_file")]
     pub taphub_transport_cert_file: String,
+    #[serde(default = "default_taphub_request_timeout_ms")]
+    pub taphub_request_timeout_ms: u64,
 
     // Telemetry configuration
     #[serde(default = "default_service_name")]
@@ -49,6 +51,10 @@ fn default_taphub_sni() -> String {
 
 fn default_taphub_transport_cert_file() -> String {
     "cert.pem".to_string()
+}
+
+fn default_taphub_request_timeout_ms() -> u64 {
+    10_000
 }
 
 fn default_service_name() -> String {

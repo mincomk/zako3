@@ -34,7 +34,22 @@ impl AudioEngineRpcServer for AeTransportHandler {
         let span = tracing::info_span!("ae.execute", otel.name = %format!("ae.{cmd}"), command = cmd);
         let _ = span.set_parent(parent_cx);
 
-        let response = self.handle_command(req).instrument(span).await;
+        // Backstop below TL's 30s dispatch timeout so TL always receives a
+        // structured response instead of hitting a transport timeout.
+        let response = match tokio::time::timeout(
+            std::time::Duration::from_secs(25),
+            self.handle_command(req).instrument(span),
+        )
+        .await
+        {
+            Ok(response) => response,
+            Err(_) => {
+                error!(command = cmd, "AudioEngine command timed out");
+                AudioEngineCommandResponse::Error(AudioEngineError::InternalError(
+                    "audio engine command timed out".to_string(),
+                ))
+            }
+        };
         Ok(response)
     }
 }

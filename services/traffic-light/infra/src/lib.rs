@@ -279,7 +279,7 @@ impl AeRegistry {
 
         // Build the HTTP client to communicate with the AE
         let http_client = HttpClientBuilder::default()
-            .request_timeout(std::time::Duration::from_secs(15))
+            .request_timeout(std::time::Duration::from_secs(30))
             .build(&url)
             .map_err(|e| RegistrationError::HttpClientBuild(e.to_string()))?;
 

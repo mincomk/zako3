@@ -45,6 +45,7 @@ pub async fn handle_command(cmd: TaphubCommands) -> Result<()> {
                 &server_addr,
                 server_name,
                 certs,
+                std::time::Duration::from_secs(10),
             )
             .await
             .map_err(|e| anyhow!("Failed to connect to taphub: {}", e))?;
