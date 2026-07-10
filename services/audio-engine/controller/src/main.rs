@@ -59,6 +59,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     &config.taphub_url,
                     config.taphub_sni.clone(),
                     certs.clone(),
+                    Duration::from_millis(config.taphub_request_timeout_ms),
                 )
                 .await
                 {

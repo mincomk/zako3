@@ -5812,7 +5812,7 @@ dependencies = [
 [[package]]
 name = "protofish3"
 version = "0.1.0"
-source = "git+https://github.com/zako-ac/protofish3-rs#5a04c7a75c5c84f6ad2558f199221779c8f73336"
+source = "git+https://github.com/zako-ac/protofish3-rs#7dd59333acc8d204bd2421fbdf11113faf4ef614"
 dependencies = [
  "bytes",
  "futures-util",
@@ -5828,7 +5828,7 @@ dependencies = [
 [[package]]
 name = "protofish3-proto"
 version = "0.1.0"
-source = "git+https://github.com/zako-ac/protofish3-rs#5a04c7a75c5c84f6ad2558f199221779c8f73336"
+source = "git+https://github.com/zako-ac/protofish3-rs#7dd59333acc8d204bd2421fbdf11113faf4ef614"
 dependencies = [
  "cookie-factory",
  "nom",

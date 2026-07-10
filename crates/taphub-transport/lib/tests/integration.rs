@@ -118,6 +118,7 @@ async fn test_transport_integration() {
         &bound_addr.to_string(),
         "localhost".to_string(),
         client_certs,
+        Duration::from_secs(10),
     )
     .await
     .expect("Failed to connect client");
@@ -168,4 +169,189 @@ async fn test_transport_integration() {
     } else {
         panic!("Expected CacheKey");
     }
+}
+
+struct StallOnceHandler {
+    calls: Arc<std::sync::atomic::AtomicUsize>,
+}
+
+#[async_trait::async_trait]
+impl TapHubBridgeHandler for StallOnceHandler {
+    async fn handle_request_audio(
+        &self,
+        _req: CachedAudioRequest,
+        _headers: HashMap<String, String>,
+    ) -> Result<(AudioMetaResponse, mpsc::Receiver<(Timestamp, bytes::Bytes)>), TapHubError> {
+        Err(TapHubError::Internal("unused".to_string()))
+    }
+
+    async fn handle_preload_audio(
+        &self,
+        _req: CachedAudioRequest,
+        _headers: HashMap<String, String>,
+    ) -> Result<AudioMetaResponse, TapHubError> {
+        Err(TapHubError::Internal("unused".to_string()))
+    }
+
+    async fn handle_request_audio_meta(
+        &self,
+        _req: AudioRequest,
+        _headers: HashMap<String, String>,
+    ) -> Result<AudioMetaResponse, TapHubError> {
+        let call = self
+            .calls
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        if call == 0 {
+            tokio::time::sleep(Duration::from_secs(60)).await;
+        }
+        Ok(AudioMetaResponse {
+            cache_key: AudioCachePolicy {
+                cache_type: AudioCacheType::CacheKey("retry_key".to_string()),
+                ttl_seconds: None,
+            },
+            metadatas: vec![AudioMetadata::Title("Retry Title".to_string())],
+            base_volume: 1.0,
+        })
+    }
+
+    async fn handle_invalidate_cache(
+        &self,
+        _req: CachedAudioRequest,
+        _headers: HashMap<String, String>,
+    ) -> Result<(), TapHubError> {
+        Ok(())
+    }
+}
+
+struct AlwaysErrHandler {
+    calls: Arc<std::sync::atomic::AtomicUsize>,
+}
+
+#[async_trait::async_trait]
+impl TapHubBridgeHandler for AlwaysErrHandler {
+    async fn handle_request_audio(
+        &self,
+        _req: CachedAudioRequest,
+        _headers: HashMap<String, String>,
+    ) -> Result<(AudioMetaResponse, mpsc::Receiver<(Timestamp, bytes::Bytes)>), TapHubError> {
+        Err(TapHubError::Internal("unused".to_string()))
+    }
+
+    async fn handle_preload_audio(
+        &self,
+        _req: CachedAudioRequest,
+        _headers: HashMap<String, String>,
+    ) -> Result<AudioMetaResponse, TapHubError> {
+        Err(TapHubError::Internal("unused".to_string()))
+    }
+
+    async fn handle_request_audio_meta(
+        &self,
+        _req: AudioRequest,
+        _headers: HashMap<String, String>,
+    ) -> Result<AudioMetaResponse, TapHubError> {
+        self.calls
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        Err(TapHubError::TapNotFound("nope".to_string()))
+    }
+
+    async fn handle_invalidate_cache(
+        &self,
+        _req: CachedAudioRequest,
+        _headers: HashMap<String, String>,
+    ) -> Result<(), TapHubError> {
+        Ok(())
+    }
+}
+
+async fn spawn_server(
+    handler: Arc<dyn TapHubBridgeHandler>,
+) -> (SocketAddr, Vec<CertificateDer<'static>>) {
+    let (server_certs, server_key) = generate_certs();
+    let client_certs = server_certs.clone();
+
+    let server_addr: SocketAddr = "127.0.0.1:0".parse().unwrap();
+    let mut server = TransportServer::new(server_addr, server_certs, server_key, handler)
+        .expect("Failed to create server");
+    let bound_addr = server.local_addr().expect("Failed to get local address");
+
+    tokio::spawn(async move {
+        server.run().await;
+    });
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    (bound_addr, client_certs)
+}
+
+fn meta_request() -> AudioRequest {
+    AudioRequest {
+        tap_id: zako3_types::hq::TapId("test_tap_id".to_string()),
+        request: "yt:meta".to_string().into(),
+        discord_user_id: "123".to_string().into(),
+        headers: HashMap::new(),
+    }
+}
+
+#[tokio::test]
+async fn test_request_timeout_resets_and_retries() {
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
+    let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let (bound_addr, client_certs) = spawn_server(Arc::new(StallOnceHandler {
+        calls: calls.clone(),
+    }))
+    .await;
+
+    let client = TransportClient::connect(
+        "127.0.0.1:0".parse().unwrap(),
+        &bound_addr.to_string(),
+        "localhost".to_string(),
+        client_certs,
+        Duration::from_millis(500),
+    )
+    .await
+    .expect("Failed to connect client");
+
+    let start = std::time::Instant::now();
+    let resp = client
+        .request_audio_meta(meta_request())
+        .await
+        .expect("expected retry to succeed after first attempt stalls");
+
+    assert!(start.elapsed() >= Duration::from_millis(500));
+    assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 2);
+    if let AudioCacheType::CacheKey(k) = resp.cache_key.cache_type {
+        assert_eq!(k, "retry_key");
+    } else {
+        panic!("Expected CacheKey");
+    }
+}
+
+#[tokio::test]
+async fn test_app_error_is_not_retried() {
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
+    let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let (bound_addr, client_certs) = spawn_server(Arc::new(AlwaysErrHandler {
+        calls: calls.clone(),
+    }))
+    .await;
+
+    let client = TransportClient::connect(
+        "127.0.0.1:0".parse().unwrap(),
+        &bound_addr.to_string(),
+        "localhost".to_string(),
+        client_certs,
+        Duration::from_millis(500),
+    )
+    .await
+    .expect("Failed to connect client");
+
+    let err = client
+        .request_audio_meta(meta_request())
+        .await
+        .expect_err("expected app-level error");
+
+    assert!(matches!(err, TapHubError::TapNotFound(_)));
+    assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
 }

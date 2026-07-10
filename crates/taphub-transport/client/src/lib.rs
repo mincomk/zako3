@@ -1,7 +1,9 @@
 mod jitter;
 
 use protofish3::xfer::XferRecv;
-use protofish3::{Client, ClientConfig, ReconnectConfig, ReconnectingClient, XferMode};
+use protofish3::{
+    ChanReceiver, ChanSender, Client, ClientConfig, ReconnectConfig, ReconnectingClient, XferMode,
+};
 use rustls::pki_types::CertificateDer;
 use std::collections::HashMap;
 use std::fs::File;
@@ -16,8 +18,12 @@ use jitter::OpusJitterBuffer;
 use zako3_taphub_transport_lib::{TapHubRequest, TapHubResponse};
 use zako3_types::{AudioMetaResponse, AudioRequest, AudioResponse, CachedAudioRequest, TapHubError};
 
+const RESET_CLOSE_CODE: u64 = 1;
+const MAX_ATTEMPTS: usize = 2;
+
 pub struct TransportClient {
     conn: Arc<ReconnectingClient>,
+    request_timeout: Duration,
 }
 
 impl TransportClient {
@@ -26,6 +32,7 @@ impl TransportClient {
         server_addr: &str,
         server_name: String,
         root_certificates: Vec<CertificateDer<'static>>,
+        request_timeout: Duration,
     ) -> Result<Self, String> {
         let server_addr = server_addr
             .to_socket_addrs()
@@ -37,6 +44,10 @@ impl TransportClient {
         config.root_certificates = root_certificates;
         config.handshake_timeout = Duration::from_secs(10);
         config.protofish.xfer_credit_update_batch_size = Some(10);
+        // Tight keepalive so stale (black-holed) connections are detected within
+        // seconds instead of quinn's 45s default idle window.
+        config.protofish.keepalive_interval = Some(Duration::from_secs(5));
+        config.protofish.keepalive_timeout = Some(Duration::from_secs(15));
 
         let client = Arc::new(Client::bind(config).map_err(|e| e.to_string())?);
 
@@ -59,71 +70,104 @@ impl TransportClient {
 
         Ok(Self {
             conn: Arc::new(conn),
+            request_timeout,
         })
     }
 
+    async fn round_trip_once(
+        &self,
+        payload: &[u8],
+    ) -> protofish3::Result<(ChanSender, ChanReceiver, Vec<u8>)> {
+        let (sender, mut receiver) = self.conn.open_chan().await?;
+        sender.send_msg(payload.to_vec()).await?;
+        let resp_payload = receiver.recv_msg().await?;
+        Ok((sender, receiver, resp_payload))
+    }
+
+    /// One request/response exchange with a per-attempt timeout. On timeout or
+    /// transport-level failure the cached connection is reset (forcing a fresh
+    /// QUIC connection) and the request is retried once. Application-level
+    /// `TapHubResponse::Error` is returned as-is, never retried.
+    async fn round_trip(
+        &self,
+        payload: Vec<u8>,
+    ) -> Result<(ChanSender, ChanReceiver, TapHubResponse), TapHubError> {
+        for attempt in 1..=MAX_ATTEMPTS {
+            match tokio::time::timeout(self.request_timeout, self.round_trip_once(&payload)).await
+            {
+                Ok(Ok((sender, receiver, resp_payload))) => {
+                    let resp: TapHubResponse = rmp_serde::from_slice(&resp_payload)
+                        .map_err(|e| TapHubError::Internal(e.to_string()))?;
+                    return Ok((sender, receiver, resp));
+                }
+                Ok(Err(e)) if attempt < MAX_ATTEMPTS && is_transport_error(&e) => {
+                    tracing::warn!(
+                        error = %e,
+                        attempt,
+                        "taphub request failed on transport; resetting connection and retrying"
+                    );
+                    self.conn.reset(RESET_CLOSE_CODE).await;
+                }
+                Ok(Err(e)) => return Err(TapHubError::Internal(e.to_string())),
+                Err(_) if attempt < MAX_ATTEMPTS => {
+                    tracing::warn!(
+                        timeout_ms = self.request_timeout.as_millis() as u64,
+                        attempt,
+                        "taphub request timed out; resetting connection and retrying"
+                    );
+                    self.conn.reset(RESET_CLOSE_CODE).await;
+                }
+                Err(_) => {
+                    return Err(TapHubError::Internal(format!(
+                        "taphub request timed out after {} attempts ({}ms each)",
+                        MAX_ATTEMPTS,
+                        self.request_timeout.as_millis()
+                    )));
+                }
+            }
+        }
+        unreachable!("round_trip loop always returns")
+    }
+
     async fn execute_request(&self, req: TapHubRequest) -> Result<TapHubResponse, TapHubError> {
-        let (sender, mut receiver) = self
-            .conn
-            .open_chan()
-            .await
-            .map_err(|e| TapHubError::Internal(e.to_string()))?;
-
         let payload = rmp_serde::to_vec(&req).map_err(|e| TapHubError::Internal(e.to_string()))?;
-        sender
-            .send_msg(payload)
-            .await
-            .map_err(|e| TapHubError::Internal(e.to_string()))?;
-
-        let resp_payload = receiver
-            .recv_msg()
-            .await
-            .map_err(|e| TapHubError::Internal(e.to_string()))?;
-        let resp: TapHubResponse =
-            rmp_serde::from_slice(&resp_payload).map_err(|e| TapHubError::Internal(e.to_string()))?;
-
+        let (_sender, _receiver, resp) = self.round_trip(payload).await?;
         Ok(resp)
     }
 
     pub async fn request_audio(&self, req: CachedAudioRequest) -> Result<AudioResponse, TapHubError> {
-        let (sender, mut receiver) = self
-            .conn
-            .open_chan()
-            .await
-            .map_err(|e| TapHubError::Internal(e.to_string()))?;
-
         let req_clone = req.clone();
         let payload = rmp_serde::to_vec(&TapHubRequest::RequestAudio(req))
             .map_err(|e| TapHubError::Internal(e.to_string()))?;
-        sender
-            .send_msg(payload)
-            .await
-            .map_err(|e| TapHubError::Internal(e.to_string()))?;
-
-        let resp_payload = receiver
-            .recv_msg()
-            .await
-            .map_err(|e| TapHubError::Internal(e.to_string()))?;
-        let resp: TapHubResponse =
-            rmp_serde::from_slice(&resp_payload).map_err(|e| TapHubError::Internal(e.to_string()))?;
+        let (sender, mut receiver, resp) = self.round_trip(payload).await?;
 
         match resp {
             TapHubResponse::AudioReady(meta) => {
                 let (tx, rx) = mpsc::channel(100);
                 let conn_clone = Arc::clone(&self.conn);
+                let xfer_timeout = self.request_timeout;
+                let invalidate_timeout = self.request_timeout;
 
                 tokio::spawn(async move {
                     // Keep the sender alive for the duration of the transfer so the
                     // chan isn't half-closed before the unreliable xfer completes.
                     let _sender = sender;
 
-                    let xfer = match receiver.accept_xfer().await {
-                        Ok(x) => x,
-                        Err(e) => {
-                            tracing::error!("accept_xfer failed: {:?}", e);
-                            return;
-                        }
-                    };
+                    let xfer =
+                        match tokio::time::timeout(xfer_timeout, receiver.accept_xfer()).await {
+                            Ok(Ok(x)) => x,
+                            Ok(Err(e)) => {
+                                tracing::error!("accept_xfer failed: {:?}", e);
+                                return;
+                            }
+                            Err(_) => {
+                                tracing::error!(
+                                    timeout_ms = xfer_timeout.as_millis() as u64,
+                                    "accept_xfer timed out"
+                                );
+                                return;
+                            }
+                        };
 
                     let single = match xfer {
                         XferRecv::Single(s) if s.mode() == XferMode::Unrel => s,
@@ -161,7 +205,12 @@ impl TransportClient {
                                     tracing::warn!(
                                         "Invalid opus packet detected; invalidating cache"
                                     );
-                                    send_invalidate_cache(conn_clone, req_clone).await;
+                                    send_invalidate_cache(
+                                        conn_clone,
+                                        req_clone,
+                                        invalidate_timeout,
+                                    )
+                                    .await;
                                 }
                                 break;
                             }
@@ -218,24 +267,51 @@ impl TransportClient {
     }
 }
 
-async fn send_invalidate_cache(conn: Arc<ReconnectingClient>, req: CachedAudioRequest) {
-    let (sender, mut receiver) = match conn.open_chan().await {
-        Ok(c) => c,
-        Err(_) => {
-            tracing::warn!("send_invalidate_cache: failed to open chan");
+fn is_transport_error(e: &protofish3::Error) -> bool {
+    matches!(
+        e,
+        protofish3::Error::ConnectionClosed(_)
+            | protofish3::Error::ChanClosed(_)
+            | protofish3::Error::DriverGone
+            | protofish3::Error::Quic(_)
+            | protofish3::Error::Connect(_)
+            | protofish3::Error::Write(_)
+            | protofish3::Error::Read(_)
+            | protofish3::Error::ReadExact(_)
+            | protofish3::Error::Io(_)
+            | protofish3::Error::HandshakeTimeout
+    )
+}
+
+async fn send_invalidate_cache(
+    conn: Arc<ReconnectingClient>,
+    req: CachedAudioRequest,
+    timeout: Duration,
+) {
+    let result = tokio::time::timeout(timeout, async move {
+        let (sender, mut receiver) = match conn.open_chan().await {
+            Ok(c) => c,
+            Err(_) => {
+                tracing::warn!("send_invalidate_cache: failed to open chan");
+                return;
+            }
+        };
+        let Ok(payload) = rmp_serde::to_vec(&TapHubRequest::InvalidateCache(req)) else {
+            tracing::warn!("send_invalidate_cache: failed to serialize request");
+            return;
+        };
+        if sender.send_msg(payload).await.is_err() {
+            tracing::warn!("send_invalidate_cache: failed to send payload");
             return;
         }
-    };
-    let Ok(payload) = rmp_serde::to_vec(&TapHubRequest::InvalidateCache(req)) else {
-        tracing::warn!("send_invalidate_cache: failed to serialize request");
-        return;
-    };
-    if sender.send_msg(payload).await.is_err() {
-        tracing::warn!("send_invalidate_cache: failed to send payload");
-        return;
-    }
-    if let Err(e) = receiver.recv_msg().await {
-        tracing::warn!("send_invalidate_cache: failed to receive response: {:?}", e);
+        if let Err(e) = receiver.recv_msg().await {
+            tracing::warn!("send_invalidate_cache: failed to receive response: {:?}", e);
+        }
+    })
+    .await;
+
+    if result.is_err() {
+        tracing::warn!("send_invalidate_cache: timed out");
     }
 }
 
