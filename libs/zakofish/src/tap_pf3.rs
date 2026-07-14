@@ -29,11 +29,25 @@ impl ZakofishTapPf3 {
 
     /// Connect to the hub and serve requests forever, reconnecting on failure.
     ///
-    /// `hub_host` is a `"<host>:<port>"` string. The hostname is re-resolved
-    /// via DNS on **every reconnect event** so that IP changes (e.g. DNS
-    /// rotation or failover) are picked up without restarting the tap.
-    /// If the resolved IP changes, the existing [`ReconnectingClient`] is
-    /// replaced with a fresh one targeting the new address.
+    /// `hub_host` is a `"<host>:<port>"` string. DNS is re-resolved on an
+    /// independent periodic timer so that IP changes due to DNS failover are
+    /// detected even while the current [`ReconnectingClient`] is stuck retrying
+    /// a permanently-dead address.
+    ///
+    /// ## Reconnect model
+    ///
+    /// Two layers of reconnect run concurrently inside this function:
+    ///
+    /// - **Inner** – [`ReconnectingClient`] handles transient failures (blips,
+    ///   server restarts) against the *current* resolved IP with exponential
+    ///   backoff.  When it succeeds, `reconnect_rx` signals and we re-handshake.
+    ///
+    /// - **Outer** – A DNS poll timer fires every [`DNS_POLL_INTERVAL`] and
+    ///   re-resolves the hostname independently of the connection state.  If the
+    ///   IP has changed (DNS failover), the old [`ReconnectingClient`] is dropped
+    ///   (which cancels its retry loop) and the outer loop creates a new one
+    ///   pointing at the new address.  This is the only path that can escape a
+    ///   permanently-dead IP.
     pub async fn connect_and_run(
         &self,
         hub_host: &str,
@@ -41,6 +55,9 @@ impl ZakofishTapPf3 {
         hello_info: TapClientHello,
         handler: Arc<dyn TapHandler>,
     ) -> Result<()> {
+        /// How often to poll DNS regardless of connection state.
+        const DNS_POLL_INTERVAL: Duration = Duration::from_secs(30);
+
         let recon_config = ReconnectConfig {
             initial_backoff: Duration::from_secs(1),
             max_backoff: Duration::from_secs(8),
@@ -49,93 +66,132 @@ impl ZakofishTapPf3 {
         };
 
         let mut current_addr = resolve(hub_host).await?;
-        let mut conn = ReconnectingClient::connect(
-            self.client.clone(),
-            current_addr,
-            server_name.to_string(),
-            HashMap::new(),
-            recon_config.clone(),
-        )
-        .await?;
 
-        let mut reconnect_rx = conn.subscribe_reconnect();
+        'outer: loop {
+            let conn = match ReconnectingClient::connect(
+                self.client.clone(),
+                current_addr,
+                server_name.to_string(),
+                HashMap::new(),
+                recon_config.clone(),
+            )
+            .await
+            {
+                Ok(c) => c,
+                Err(e) => {
+                    tracing::error!(
+                        "Failed to open ReconnectingClient to {}: {:?}; re-resolving and retrying",
+                        current_addr,
+                        e,
+                    );
+                    tokio::time::sleep(recon_config.initial_backoff).await;
+                    if let Ok(addr) = resolve(hub_host).await {
+                        current_addr = addr;
+                    }
+                    continue 'outer;
+                }
+            };
 
-        do_handshake(&conn, &hello_info).await?;
+            let mut reconnect_rx = conn.subscribe_reconnect();
 
-        loop {
-            tokio::select! {
-                _ = reconnect_rx.changed() => {
-                    reconnect_rx.borrow_and_update();
+            // DNS poll timer – fires independently of the connection state so
+            // that a permanently-dead IP is detected even while
+            // `ReconnectingClient` is stuck retrying it.
+            let mut dns_interval = tokio::time::interval(DNS_POLL_INTERVAL);
+            // Consume the first (immediate) tick so the select arm doesn't
+            // fire right after a fresh connect.
+            dns_interval.tick().await;
 
-                    // Re-resolve the hostname; swap the client if the IP changed.
-                    match resolve(hub_host).await {
-                        Ok(new_addr) if new_addr != current_addr => {
-                            tracing::info!(
-                                "Hub IP changed {} → {}; reconnecting to new address",
-                                current_addr,
-                                new_addr,
-                            );
-                            match ReconnectingClient::connect(
-                                self.client.clone(),
-                                new_addr,
-                                server_name.to_string(),
-                                HashMap::new(),
-                                recon_config.clone(),
-                            )
-                            .await
-                            {
-                                Ok(new_conn) => {
-                                    conn = new_conn;
-                                    reconnect_rx = conn.subscribe_reconnect();
-                                    current_addr = new_addr;
-                                }
-                                Err(e) => {
-                                    tracing::warn!(
-                                        "Failed to connect to new hub address {}: {:?}; \
-                                         keeping old connection",
-                                        new_addr,
-                                        e,
-                                    );
-                                }
+            if let Err(e) = do_handshake(&conn, &hello_info).await {
+                tracing::error!(
+                    "Initial handshake with {} failed: {:?}; retrying",
+                    current_addr,
+                    e,
+                );
+                tokio::time::sleep(recon_config.initial_backoff).await;
+                continue 'outer;
+            }
+
+            loop {
+                tokio::select! {
+                    // ── Independent DNS poll ────────────────────────────────
+                    // This arm fires every DNS_POLL_INTERVAL regardless of
+                    // whether the underlying connection is healthy, retrying,
+                    // or stuck against a dead IP.  It is the only mechanism
+                    // that can detect a permanent IP change.
+                    _ = dns_interval.tick() => {
+                        match resolve(hub_host).await {
+                            Ok(new_addr) if new_addr != current_addr => {
+                                tracing::info!(
+                                    "DNS failover detected for '{}': {} → {}; \
+                                     dropping current client and reconnecting",
+                                    hub_host, current_addr, new_addr,
+                                );
+                                current_addr = new_addr;
+                                // Dropping `conn` here cancels the
+                                // ReconnectingClient's internal retry loop
+                                // against the dead IP.
+                                break; // → outer loop creates new client
+                            }
+                            Ok(_) => {
+                                tracing::debug!(
+                                    "DNS poll: '{}' still resolves to {} (unchanged)",
+                                    hub_host, current_addr,
+                                );
+                            }
+                            Err(e) => {
+                                tracing::warn!(
+                                    "DNS poll for '{}' failed: {:?}; \
+                                     keeping current address {}",
+                                    hub_host, e, current_addr,
+                                );
                             }
                         }
-                        Ok(_) => {
-                            tracing::info!("Reconnected to Hub (IP unchanged), re-sending ClientHello");
-                        }
-                        Err(e) => {
-                            tracing::warn!(
-                                "DNS re-resolution of '{}' failed: {:?}; \
-                                 keeping existing connection",
-                                hub_host,
-                                e,
-                            );
+                    }
+
+                    // ── Transient reconnect (same IP) ───────────────────────
+                    // ReconnectingClient successfully reconnected to the same
+                    // IP after a blip.  Re-handshake; no IP change.
+                    _ = reconnect_rx.changed() => {
+                        reconnect_rx.borrow_and_update();
+                        tracing::info!(
+                            "Reconnected to Hub at {} (same IP), re-sending ClientHello",
+                            current_addr,
+                        );
+                        if let Err(e) = do_handshake(&conn, &hello_info).await {
+                            tracing::error!("Re-handshake failed: {:?}", e);
                         }
                     }
 
-                    if let Err(e) = do_handshake(&conn, &hello_info).await {
-                        tracing::error!("Re-handshake failed: {:?}", e);
-                    }
-                }
-                chan_result = conn.accept_chan() => {
-                    match chan_result {
-                        Ok((sender, receiver)) => {
-                            let handler_clone = handler.clone();
-                            tokio::spawn(async move {
-                                if let Err(e) = handle_incoming_chan(sender, receiver, handler_clone).await {
-                                    tracing::error!("Error handling incoming chan: {:?}", e);
+                    // ── Incoming request channel ────────────────────────────
+                    chan_result = conn.accept_chan() => {
+                        match chan_result {
+                            Ok((sender, receiver)) => {
+                                let handler_clone = handler.clone();
+                                tokio::spawn(async move {
+                                    if let Err(e) =
+                                        handle_incoming_chan(sender, receiver, handler_clone).await
+                                    {
+                                        tracing::error!("Error handling incoming chan: {:?}", e);
+                                    }
+                                });
+                            }
+                            Err(e) => {
+                                tracing::error!(
+                                    "accept_chan error (addr={}): {:?}; re-resolving and reconnecting",
+                                    current_addr, e,
+                                );
+                                if let Ok(addr) = resolve(hub_host).await {
+                                    current_addr = addr;
                                 }
-                            });
-                        }
-                        Err(e) => {
-                            tracing::error!("Failed to accept chan: {:?}", e);
-                            break;
+                                break; // → outer loop creates new client
+                            }
                         }
                     }
                 }
             }
+            // `conn` is dropped here, cancelling any in-progress retry loop.
         }
-
-        Ok(())
     }
 }
 
