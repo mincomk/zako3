@@ -5,6 +5,7 @@ use protofish3::{
     ChanReceiver, ChanSender, Client, ClientConfig, ReconnectConfig, ReconnectingClient, XferMode,
 };
 use std::collections::HashMap;
+use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -26,9 +27,16 @@ impl ZakofishTapPf3 {
         })
     }
 
+    /// Connect to the hub and serve requests forever, reconnecting on failure.
+    ///
+    /// `hub_host` is a `"<host>:<port>"` string. The hostname is re-resolved
+    /// via DNS on **every reconnect event** so that IP changes (e.g. DNS
+    /// rotation or failover) are picked up without restarting the tap.
+    /// If the resolved IP changes, the existing [`ReconnectingClient`] is
+    /// replaced with a fresh one targeting the new address.
     pub async fn connect_and_run(
         &self,
-        hub_addr: std::net::SocketAddr,
+        hub_host: &str,
         server_name: &str,
         hello_info: TapClientHello,
         handler: Arc<dyn TapHandler>,
@@ -40,12 +48,13 @@ impl ZakofishTapPf3 {
             max_retries: None,
         };
 
-        let conn = ReconnectingClient::connect(
+        let mut current_addr = resolve(hub_host).await?;
+        let mut conn = ReconnectingClient::connect(
             self.client.clone(),
-            hub_addr,
+            current_addr,
             server_name.to_string(),
             HashMap::new(),
-            recon_config,
+            recon_config.clone(),
         )
         .await?;
 
@@ -57,7 +66,52 @@ impl ZakofishTapPf3 {
             tokio::select! {
                 _ = reconnect_rx.changed() => {
                     reconnect_rx.borrow_and_update();
-                    tracing::info!("Reconnected to Hub, re-sending ClientHello");
+
+                    // Re-resolve the hostname; swap the client if the IP changed.
+                    match resolve(hub_host).await {
+                        Ok(new_addr) if new_addr != current_addr => {
+                            tracing::info!(
+                                "Hub IP changed {} → {}; reconnecting to new address",
+                                current_addr,
+                                new_addr,
+                            );
+                            match ReconnectingClient::connect(
+                                self.client.clone(),
+                                new_addr,
+                                server_name.to_string(),
+                                HashMap::new(),
+                                recon_config.clone(),
+                            )
+                            .await
+                            {
+                                Ok(new_conn) => {
+                                    conn = new_conn;
+                                    reconnect_rx = conn.subscribe_reconnect();
+                                    current_addr = new_addr;
+                                }
+                                Err(e) => {
+                                    tracing::warn!(
+                                        "Failed to connect to new hub address {}: {:?}; \
+                                         keeping old connection",
+                                        new_addr,
+                                        e,
+                                    );
+                                }
+                            }
+                        }
+                        Ok(_) => {
+                            tracing::info!("Reconnected to Hub (IP unchanged), re-sending ClientHello");
+                        }
+                        Err(e) => {
+                            tracing::warn!(
+                                "DNS re-resolution of '{}' failed: {:?}; \
+                                 keeping existing connection",
+                                hub_host,
+                                e,
+                            );
+                        }
+                    }
+
                     if let Err(e) = do_handshake(&conn, &hello_info).await {
                         tracing::error!("Re-handshake failed: {:?}", e);
                     }
@@ -83,6 +137,18 @@ impl ZakofishTapPf3 {
 
         Ok(())
     }
+}
+
+/// Resolve a `"<host>:<port>"` string to the first [`SocketAddr`] returned by
+/// the OS resolver.  Returns an error if the lookup fails or yields no results.
+async fn resolve(host: &str) -> Result<SocketAddr> {
+    tokio::net::lookup_host(host)
+        .await
+        .map_err(|e| {
+            ZakofishError::ProtocolError(format!("DNS lookup failed for '{}': {}", host, e))
+        })?
+        .next()
+        .ok_or_else(|| ZakofishError::ProtocolError(format!("No addresses found for '{}'", host)))
 }
 
 async fn do_handshake(conn: &ReconnectingClient, hello_info: &TapClientHello) -> Result<()> {
