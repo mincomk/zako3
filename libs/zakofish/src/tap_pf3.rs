@@ -1,11 +1,16 @@
 //! pf3 tap-side implementation. Uses the protofish3 chan/xfer API and the
 //! [`crate::tap::TapHandler`] trait.
 
+use hickory_resolver::{
+    TokioAsyncResolver,
+    config::{NameServerConfig, Protocol, ResolverConfig, ResolverOpts},
+    name_server::TokioConnectionProvider,
+};
 use protofish3::{
     ChanReceiver, ChanSender, Client, ClientConfig, ReconnectConfig, ReconnectingClient, XferMode,
 };
 use std::collections::HashMap;
-use std::net::SocketAddr;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -65,7 +70,33 @@ impl ZakofishTapPf3 {
             max_retries: None,
         };
 
-        let mut current_addr = resolve(hub_host).await?;
+        // Build a resolver that queries 1.1.1.1 directly, bypassing the system
+        // resolver.  Created once per `connect_and_run` invocation and reused
+        // for all DNS polls.
+        let resolver = {
+            let mut cfg = ResolverConfig::new();
+            cfg.add_name_server(NameServerConfig {
+                socket_addr: (IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1)), 53).into(),
+                protocol: Protocol::Udp,
+                tls_dns_name: None,
+                trust_negative_responses: false,
+                bind_addr: None,
+            });
+            cfg.add_name_server(NameServerConfig {
+                socket_addr: (IpAddr::V4(Ipv4Addr::new(1, 0, 0, 1)), 53).into(),
+                protocol: Protocol::Udp,
+                tls_dns_name: None,
+                trust_negative_responses: false,
+                bind_addr: None,
+            });
+            TokioAsyncResolver::new(
+                cfg,
+                ResolverOpts::default(),
+                TokioConnectionProvider::default(),
+            )
+        };
+
+        let mut current_addr = resolve(hub_host, &resolver).await?;
 
         'outer: loop {
             let conn = match ReconnectingClient::connect(
@@ -85,7 +116,7 @@ impl ZakofishTapPf3 {
                         e,
                     );
                     tokio::time::sleep(recon_config.initial_backoff).await;
-                    if let Ok(addr) = resolve(hub_host).await {
+                    if let Ok(addr) = resolve(hub_host, &resolver).await {
                         current_addr = addr;
                     }
                     continue 'outer;
@@ -120,7 +151,7 @@ impl ZakofishTapPf3 {
                     // or stuck against a dead IP.  It is the only mechanism
                     // that can detect a permanent IP change.
                     _ = dns_interval.tick() => {
-                        match resolve(hub_host).await {
+                        match resolve(hub_host, &resolver).await {
                             Ok(new_addr) if new_addr != current_addr => {
                                 tracing::info!(
                                     "DNS failover detected for '{}': {} → {}; \
@@ -181,7 +212,7 @@ impl ZakofishTapPf3 {
                                     "accept_chan error (addr={}): {:?}; re-resolving and reconnecting",
                                     current_addr, e,
                                 );
-                                if let Ok(addr) = resolve(hub_host).await {
+                                if let Ok(addr) = resolve(hub_host, &resolver).await {
                                     current_addr = addr;
                                 }
                                 break; // → outer loop creates new client
@@ -195,16 +226,28 @@ impl ZakofishTapPf3 {
     }
 }
 
-/// Resolve a `"<host>:<port>"` string to the first [`SocketAddr`] returned by
-/// the OS resolver.  Returns an error if the lookup fails or yields no results.
-async fn resolve(host: &str) -> Result<SocketAddr> {
-    tokio::net::lookup_host(host)
-        .await
-        .map_err(|e| {
-            ZakofishError::ProtocolError(format!("DNS lookup failed for '{}': {}", host, e))
-        })?
-        .next()
-        .ok_or_else(|| ZakofishError::ProtocolError(format!("No addresses found for '{}'", host)))
+/// Resolve a `"<host>:<port>"` string to a [`SocketAddr`] by querying
+/// Cloudflare 1.1.1.1 directly, bypassing the OS system resolver.
+async fn resolve(host: &str, resolver: &TokioAsyncResolver) -> Result<SocketAddr> {
+    let (hostname, port_str) = host
+        .rsplit_once(':')
+        .ok_or_else(|| ZakofishError::ProtocolError(format!("invalid host:port '{}'", host)))?;
+    let port: u16 = port_str
+        .parse()
+        .map_err(|_| ZakofishError::ProtocolError(format!("invalid port in '{}'", host)))?;
+
+    let response = resolver.lookup_ip(hostname).await.map_err(|e| {
+        ZakofishError::ProtocolError(format!(
+            "DNS lookup failed for '{}' via 1.1.1.1: {}",
+            hostname, e
+        ))
+    })?;
+
+    let ip = response.iter().next().ok_or_else(|| {
+        ZakofishError::ProtocolError(format!("no addresses found for '{}'", hostname))
+    })?;
+
+    Ok(SocketAddr::new(ip, port))
 }
 
 async fn do_handshake(conn: &ReconnectingClient, hello_info: &TapClientHello) -> Result<()> {
