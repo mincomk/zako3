@@ -120,12 +120,6 @@ impl TapBuilder {
             .clone()
             .unwrap_or_else(|| hub_addr.split(':').next().unwrap_or_default().to_string());
 
-        let socket_addr = tokio::net::lookup_host(&hub_addr)
-            .await
-            .map_err(SdkError::Io)?
-            .next()
-            .ok_or_else(|| SdkError::Tls(format!("could not resolve: {}", hub_addr)))?;
-
         // Use provided cert PEM or fall back to system trust store
         let root_certificates = if let Some(cert_path) = &self.cert_pem {
             load_certs(cert_path)?
@@ -164,7 +158,7 @@ impl TapBuilder {
 
         let zf_tap = ZakofishTapPf3::new(client_config)?;
         zf_tap
-            .connect_and_run(socket_addr, server_name.as_str(), hello, bridge)
+            .connect_and_run(&hub_addr, server_name.as_str(), hello, bridge)
             .await?;
 
         Ok(())

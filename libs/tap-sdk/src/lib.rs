@@ -10,12 +10,12 @@ pub mod encode;
 #[cfg(feature = "healthcheck")]
 pub(crate) mod healthcheck;
 
-pub use builder::{tap, TapBuilder, Transport};
+pub use builder::{TapBuilder, Transport, tap};
 pub use error::{SdkError, TapError};
 pub use handler::TapHandler;
 pub use source::AudioSource;
-pub use zakofish::{Timestamp, TransferMode};
 pub use stream::AudioStreamSender;
+pub use zakofish::{Timestamp, TransferMode};
 
 // Re-export message types for SDK users
 pub use zakofish::types::message::{
