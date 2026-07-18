@@ -43,7 +43,8 @@ use tokio::sync::broadcast;
 use zako3_cache_client::RemoteAudioCache;
 use zako3_metrics::TapMetricsService;
 use zako3_states::{
-    IntendedVoiceChannelService, TapHubStateService, UserSettingsStateService, VoiceStateService,
+    IntendedVoiceChannelService, TapHubStateService, TapNamesCacheService, UserSettingsStateService,
+    VoiceStateService,
 };
 use zako3_tl_client::TlClient;
 
@@ -139,6 +140,7 @@ impl Service {
         });
         let tap_hub_state_service = TapHubStateService::new(redis_repo.clone());
         let user_settings_cache = UserSettingsStateService::new(redis_repo.clone());
+        let tap_names_cache = TapNamesCacheService::new(redis_repo.clone());
 
         let tap_service = TapService::new(
             tap_repo.clone(),
@@ -146,6 +148,7 @@ impl Service {
             audit_log_service.clone(),
             tap_metrics_service.clone(),
             tap_hub_state_service,
+            tap_names_cache,
         );
         let api_key_service = ApiKeyService::new(
             api_key_repo.clone(),

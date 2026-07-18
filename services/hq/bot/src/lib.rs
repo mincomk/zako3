@@ -17,17 +17,8 @@ pub mod util;
 use discord_resolver::SerenityNameResolver;
 pub use error::BotError;
 
-/// A cached snapshot of a user's accessible tap names for autocomplete, with the
-/// instant it was fetched so callers can enforce a TTL.
-pub struct CachedNames {
-    pub names: Arc<Vec<String>>,
-    pub fetched_at: std::time::Instant,
-}
-
 pub struct Data {
     pub service: Service,
-    /// discord_id -> cached accessible tap names for autocomplete (30s TTL).
-    pub provider_name_cache: dashmap::DashMap<String, CachedNames>,
 }
 
 pub type Error = BotError;
@@ -146,7 +137,6 @@ pub async fn run(
                 poise::builtins::register_globally(ctx, &framework.options().commands).await?;
                 Ok(Data {
                     service: service.clone(),
-                    provider_name_cache: dashmap::DashMap::new(),
                 })
             })
         })

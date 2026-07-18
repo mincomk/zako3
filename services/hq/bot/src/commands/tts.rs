@@ -1,7 +1,5 @@
-use crate::{ui, util, util::VoiceStateExt, CachedNames, Context, Error};
+use crate::{ui, util, util::VoiceStateExt, Context, Error};
 use hq_core::{service::UserVoiceInfo, CoreError};
-use std::sync::Arc;
-use std::time::{Duration, Instant};
 use hq_types::{
     hq::settings::{PartialUserSettings, UserSettingsField},
     hq::{DiscordUserId, TapId, TapName},
@@ -287,10 +285,6 @@ pub async fn skip(
     Ok(())
 }
 
-/// How long a cached tap-name list stays fresh before autocomplete refetches it.
-const AUTOCOMPLETE_CACHE_TTL: Duration = Duration::from_secs(30);
-/// Soft cap on cached users; exceeding it triggers a lazy sweep of expired entries.
-const MAX_AUTOCOMPLETE_CACHE_ENTRIES: usize = 10_000;
 /// Max taps shown in the `/tts voice` picker embed — keeps the description under
 /// Discord's 4096-char limit (and matches the old paginated default of 20).
 const VOICE_LIST_MAX_ENTRIES: usize = 20;
@@ -310,49 +304,26 @@ fn filter_tap_names(names: &[String], partial: &str) -> Vec<String> {
 
 async fn autocomplete_provider(ctx: Context<'_>, partial: &str) -> Vec<String> {
     let discord_id = ctx.author().id.to_string();
-    let cache = &ctx.data().provider_name_cache;
+    let service = &ctx.data().service;
 
-    // Fast path: clone the Arc out and drop the DashMap guard before any await.
-    let cached = cache.get(&discord_id).and_then(|e| {
-        (e.fetched_at.elapsed() < AUTOCOMPLETE_CACHE_TTL).then(|| e.names.clone())
-    });
+    let user_id = match service.tap.get_user_by_discord_id(&discord_id).await {
+        Ok(Some(u)) => Some(u.id),
+        Ok(None) => None,
+        Err(e) => {
+            tracing::error!("Failed to get user for autocomplete: {:?}", e);
+            return vec![];
+        }
+    };
 
-    let names = match cached {
-        Some(names) => names,
-        None => {
-            let service = &ctx.data().service;
-            let user_id = match service.tap.get_user_by_discord_id(&discord_id).await {
-                Ok(Some(u)) => Some(u.id),
-                Ok(None) => None,
-                Err(e) => {
-                    tracing::error!("Failed to get user for autocomplete: {:?}", e);
-                    return vec![];
-                }
-            };
-
-            // Fetch the full accessible name list once (search=None); we filter
-            // `partial` client-side, matching the server-side substring search
-            // semantics. Names-only avoids the per-tap owner/metrics enrichment.
-            let names = match service.tap.list_accessible_names(user_id).await {
-                Ok(names) => Arc::new(names),
-                Err(e) => {
-                    tracing::error!("Failed to list taps for autocomplete: {:?}", e);
-                    return vec![];
-                }
-            };
-
-            // Bound growth: sweep expired entries when the map gets large.
-            if cache.len() > MAX_AUTOCOMPLETE_CACHE_ENTRIES {
-                cache.retain(|_, v| v.fetched_at.elapsed() < AUTOCOMPLETE_CACHE_TTL);
-            }
-            cache.insert(
-                discord_id,
-                CachedNames {
-                    names: names.clone(),
-                    fetched_at: Instant::now(),
-                },
-            );
-            names
+    // Fetch the full accessible name list once (search=None); we filter `partial`
+    // client-side, matching the server-side substring search semantics. The list is
+    // Redis-cached per user (30s TTL) inside `list_accessible_names`, shared across
+    // bot replicas — so this is a cheap cache hit on the hot path.
+    let names = match service.tap.list_accessible_names(user_id).await {
+        Ok(names) => names,
+        Err(e) => {
+            tracing::error!("Failed to list taps for autocomplete: {:?}", e);
+            return vec![];
         }
     };
 

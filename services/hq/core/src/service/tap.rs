@@ -12,7 +12,7 @@ use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::Arc;
 use zako3_metrics::{TapMetricsRow, TapMetricsService};
-use zako3_states::TapHubStateService;
+use zako3_states::{TapHubStateService, TapNamesCacheService};
 
 /// Max taps enriched concurrently. Owner + latest-metrics lookups are now batched into
 /// one Postgres query each per listing (see `batch_owner_and_rows`), so a listing holds
@@ -42,6 +42,7 @@ pub struct TapService {
     audit_log: AuditLogService,
     tap_metrics: TapMetricsService,
     tap_hub_state: TapHubStateService,
+    tap_names_cache: TapNamesCacheService,
 }
 
 impl TapService {
@@ -51,6 +52,7 @@ impl TapService {
         audit_log: AuditLogService,
         tap_metrics: TapMetricsService,
         tap_hub_state: TapHubStateService,
+        tap_names_cache: TapNamesCacheService,
     ) -> Self {
         Self {
             tap_repo,
@@ -58,6 +60,7 @@ impl TapService {
             audit_log,
             tap_metrics,
             tap_hub_state,
+            tap_names_cache,
         }
     }
 
@@ -247,6 +250,9 @@ impl TapService {
         &self,
         user_id: Option<UserId>,
     ) -> CoreResult<Vec<String>> {
+        if let Some(cached) = self.tap_names_cache.get_cached(&user_id).await {
+            return Ok(cached);
+        }
         let taps = self.tap_repo.list_all().await?;
         let requester_discord_id = self.resolve_requester_discord_id(&user_id).await;
         let mut names: Vec<String> = taps
@@ -257,6 +263,7 @@ impl TapService {
             .map(|t| t.name.0)
             .collect();
         names.sort();
+        self.tap_names_cache.set_cached(&user_id, &names).await;
         Ok(names)
     }
 
