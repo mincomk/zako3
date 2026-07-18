@@ -35,7 +35,11 @@ impl AudioEngineRpcServer for AeTransportHandler {
         let _ = span.set_parent(parent_cx);
 
         // Backstop below TL's 30s dispatch timeout so TL always receives a
-        // structured response instead of hitting a transport timeout.
+        // structured response instead of hitting a transport timeout. This must stay
+        // above the worst-case taphub budget of a single command: a normal `play` makes
+        // two sequential taphub calls (request_audio_meta + request_audio), each up to
+        // MAX_ATTEMPTS × TAPHUB_REQUEST_TIMEOUT_MS. Keep
+        //   2 × MAX_ATTEMPTS(2) × per_attempt(6s) = 24s ≤ 25s < TL dispatch(30s).
         let response = match tokio::time::timeout(
             std::time::Duration::from_secs(25),
             self.handle_command(req).instrument(span),

@@ -5,12 +5,20 @@ use crate::{CoreError, CoreResult};
 use chrono::Utc;
 use hq_types::hq::{
     CreateTapDto, PaginatedResponseDto, PaginationMetaDto, Tap, TapDto, TapId, TapName, TapRole,
-    TapStatsDto, TapWithAccessDto, TimeSeriesPointDto, UserId, UserSummaryDto,
+    TapStatsDto, TapWithAccessDto, TimeSeriesPointDto, User, UserId, UserSummaryDto,
 };
+use futures_util::stream::{self, StreamExt};
 use serde::Deserialize;
+use std::collections::HashMap;
 use std::sync::Arc;
-use zako3_metrics::TapMetricsService;
-use zako3_states::TapHubStateService;
+use zako3_metrics::{TapMetricsRow, TapMetricsService};
+use zako3_states::{TapHubStateService, TapNamesCacheService};
+
+/// Max taps enriched concurrently. Owner + latest-metrics lookups are now batched into
+/// one Postgres query each per listing (see `batch_owner_and_rows`), so a listing holds
+/// at most one sqlx connection regardless of tap count — this bound only caps the
+/// remaining per-tap Redis fan-out in `map_to_tap_dto`, not the sqlx pool.
+const ENRICH_CONCURRENCY: usize = 4;
 
 #[derive(Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -34,6 +42,7 @@ pub struct TapService {
     audit_log: AuditLogService,
     tap_metrics: TapMetricsService,
     tap_hub_state: TapHubStateService,
+    tap_names_cache: TapNamesCacheService,
 }
 
 impl TapService {
@@ -43,6 +52,7 @@ impl TapService {
         audit_log: AuditLogService,
         tap_metrics: TapMetricsService,
         tap_hub_state: TapHubStateService,
+        tap_names_cache: TapNamesCacheService,
     ) -> Self {
         Self {
             tap_repo,
@@ -50,6 +60,7 @@ impl TapService {
             audit_log,
             tap_metrics,
             tap_hub_state,
+            tap_names_cache,
         }
     }
 
@@ -107,7 +118,7 @@ impl TapService {
 
         let mut tap_dtos = Vec::new();
         for tap in taps {
-            let tap_dto = self.map_to_tap_dto(tap).await;
+            let tap_dto = self.map_to_tap_dto(tap, None).await;
 
             let tap_with_access = TapWithAccessDto {
                 tap: tap_dto,
@@ -132,6 +143,144 @@ impl TapService {
                 total_pages: 1,
             },
         })
+    }
+
+    /// Enrich a raw tap into a `TapWithAccessDto`. Both the access decision and the
+    /// owner + latest metrics row are resolved by the caller (batched, query-free once
+    /// per listing) and passed in; the only remaining work is the Redis-backed dto map.
+    async fn enrich_tap(
+        &self,
+        tap: Tap,
+        has_access: bool,
+        owner: &User,
+        row: Option<TapMetricsRow>,
+    ) -> TapWithAccessDto {
+        let tap_dto = self.map_to_tap_dto(tap, row).await;
+        TapWithAccessDto {
+            tap: tap_dto,
+            has_access,
+            owner: UserSummaryDto {
+                id: owner.id.0.clone(),
+                username: owner.username.0.clone(),
+                avatar: owner.avatar_url.clone().unwrap_or_default(),
+            },
+        }
+    }
+
+    /// Resolve the requester's discord id with a single query so per-tap access checks
+    /// (`check_access_resolved`) need no further database round-trips.
+    async fn resolve_requester_discord_id(&self, user_id: &Option<UserId>) -> Option<String> {
+        match user_id {
+            Some(uid) => self
+                .user_repo
+                .find_by_id(uid.clone())
+                .await
+                .ok()
+                .flatten()
+                .map(|u| u.discord_user_id.0),
+            None => None,
+        }
+    }
+
+    /// Batch-fetch, in one Postgres query each, the owner and latest-metrics-row maps for
+    /// a set of taps — so the per-tap enrichment fan-out needs no further Postgres
+    /// round-trips (removes the previous per-tap owner/metrics N+1). Missing owners/rows
+    /// are simply absent from the returned maps.
+    async fn batch_owner_and_rows(
+        &self,
+        taps: &[Tap],
+    ) -> CoreResult<(HashMap<UserId, User>, HashMap<TapId, TapMetricsRow>)> {
+        let owner_ids: Vec<UserId> = taps.iter().map(|t| t.owner_id.clone()).collect();
+        let tap_ids: Vec<TapId> = taps.iter().map(|t| t.id.clone()).collect();
+        let (owners, rows) = tokio::join!(
+            self.user_repo.find_by_ids(owner_ids),
+            self.tap_metrics.get_latest_rows(&tap_ids),
+        );
+        let owners: HashMap<UserId, User> =
+            owners?.into_iter().map(|u| (u.id.clone(), u)).collect();
+        let rows = rows.unwrap_or_default();
+        Ok((owners, rows))
+    }
+
+    /// Returns every tap the user can access, unpaginated, sorted most-used first.
+    /// Used by the bot where the full list is required (autocomplete, validation,
+    /// listing) — unlike `list_all_paginated`, which caps results for API callers.
+    pub async fn list_all_accessible(
+        &self,
+        user_id: Option<UserId>,
+    ) -> CoreResult<Vec<TapWithAccessDto>> {
+        let mut taps = self.tap_repo.list_all().await?;
+
+        // Resolve the requester once, then drop inaccessible taps *before* the
+        // expensive per-tap enrichment — we only enrich what the user can see.
+        let requester_discord_id = self.resolve_requester_discord_id(&user_id).await;
+        taps.retain(|t| Self::check_access_resolved(t, &user_id, requester_discord_id.as_deref()));
+
+        // Batch the owner + metrics lookups once, then fan out the Redis-backed dto map.
+        let (owners, rows) = self.batch_owner_and_rows(&taps).await?;
+        let mut out: Vec<TapWithAccessDto> = stream::iter(taps)
+            .map(|tap| {
+                let owner = owners.get(&tap.owner_id).cloned();
+                let row = rows.get(&tap.id).cloned();
+                async move {
+                    let owner = match owner {
+                        Some(o) => o,
+                        None => {
+                            tracing::warn!(tap_id = %tap.id, "skipping tap with missing owner");
+                            return None;
+                        }
+                    };
+                    Some(self.enrich_tap(tap, true, &owner, row).await)
+                }
+            })
+            .buffer_unordered(ENRICH_CONCURRENCY)
+            .filter_map(|x| async move { x })
+            .collect()
+            .await;
+
+        out.sort_by(|a, b| b.tap.total_uses.cmp(&a.tap.total_uses));
+        Ok(out)
+    }
+
+    /// Names of every tap the user can access, sorted alphabetically. Used by bot
+    /// autocomplete, which needs only names — so this skips the per-tap owner and
+    /// metrics enrichment that `list_all_accessible` performs (2 queries total,
+    /// independent of tap count).
+    pub async fn list_accessible_names(
+        &self,
+        user_id: Option<UserId>,
+    ) -> CoreResult<Vec<String>> {
+        if let Some(cached) = self.tap_names_cache.get_cached(&user_id).await {
+            return Ok(cached);
+        }
+        let taps = self.tap_repo.list_all().await?;
+        let requester_discord_id = self.resolve_requester_discord_id(&user_id).await;
+        let mut names: Vec<String> = taps
+            .into_iter()
+            .filter(|t| {
+                Self::check_access_resolved(t, &user_id, requester_discord_id.as_deref())
+            })
+            .map(|t| t.name.0)
+            .collect();
+        names.sort();
+        self.tap_names_cache.set_cached(&user_id, &names).await;
+        Ok(names)
+    }
+
+    /// Find a tap by name (ASCII case-insensitive) that the user can access, skipping
+    /// the per-tap owner/metrics enrichment — 2 queries total. Used by the bot to
+    /// validate a user-supplied voice name.
+    pub async fn find_accessible_by_name(
+        &self,
+        user_id: Option<UserId>,
+        name: &str,
+    ) -> CoreResult<Option<Tap>> {
+        let taps = self.tap_repo.list_all().await?;
+        let requester_discord_id = self.resolve_requester_discord_id(&user_id).await;
+        Ok(taps.into_iter().find(|t| {
+            t.name.0.eq_ignore_ascii_case(name)
+                && Self::check_access_resolved(t, &user_id, requester_discord_id.as_deref())
+        }))
     }
 
     pub async fn list_all_paginated(
@@ -167,33 +316,39 @@ impl TapService {
             });
         }
 
-        // 3. Enrich surviving taps
-        let mut tap_dtos = Vec::new();
-        for tap in taps {
-            let owner = self
-                .user_repo
-                .find_by_id(tap.owner_id.clone())
-                .await?
-                .ok_or(CoreError::NotFound("Owner not found".to_string()))?;
-
-            let has_access = self.check_access(&tap, user_id.clone()).await;
-            let tap_dto = self.map_to_tap_dto(tap).await;
-
-            tap_dtos.push(TapWithAccessDto {
-                tap: tap_dto,
-                has_access,
-                owner: UserSummaryDto {
-                    id: owner.id.0.clone(),
-                    username: owner.username.0.clone(),
-                    avatar: owner.avatar_url.clone().unwrap_or_default(),
-                },
+        // 3. Resolve the requester once; when only accessible taps are wanted, drop the
+        //    rest *before* enrichment so we never pay the per-tap cost for hidden taps.
+        let requester_discord_id = self.resolve_requester_discord_id(&user_id).await;
+        if accessible == Some(true) {
+            taps.retain(|t| {
+                Self::check_access_resolved(t, &user_id, requester_discord_id.as_deref())
             });
         }
 
-        // 4. Filter by accessible
-        if accessible == Some(true) {
-            tap_dtos.retain(|t| t.has_access);
-        }
+        // 4. Batch owner + metrics lookups once, then enrich surviving taps concurrently,
+        //    carrying the query-free access decision.
+        let (owners, rows) = self.batch_owner_and_rows(&taps).await?;
+        let mut tap_dtos: Vec<TapWithAccessDto> = stream::iter(taps)
+            .map(|tap| {
+                let has_access =
+                    Self::check_access_resolved(&tap, &user_id, requester_discord_id.as_deref());
+                let owner = owners.get(&tap.owner_id).cloned();
+                let row = rows.get(&tap.id).cloned();
+                async move {
+                    let owner = match owner {
+                        Some(o) => o,
+                        None => {
+                            tracing::warn!(tap_id = %tap.id, "skipping tap with missing owner");
+                            return None;
+                        }
+                    };
+                    Some(self.enrich_tap(tap, has_access, &owner, row).await)
+                }
+            })
+            .buffer_unordered(ENRICH_CONCURRENCY)
+            .filter_map(|x| async move { x })
+            .collect()
+            .await;
 
         // 5. Sort
         let desc = sort_direction.as_ref() != Some(&SortDirection::Asc);
@@ -255,7 +410,7 @@ impl TapService {
 
         let has_access = self.check_access(&tap, user_id).await;
 
-        let tap_dto = self.map_to_tap_dto(tap).await;
+        let tap_dto = self.map_to_tap_dto(tap, None).await;
 
         Ok(TapWithAccessDto {
             tap: tap_dto,
@@ -566,60 +721,78 @@ impl TapService {
     pub async fn check_access(&self, tap: &Tap, user_id: Option<UserId>) -> bool {
         use hq_types::hq::TapPermission;
 
+        // Only a non-owner requester against a whitelist/blacklist needs the discord
+        // id; every other case (public, owner-only, owner short-circuit) is
+        // query-free, matching the previous behaviour.
+        let needs_discord = matches!(
+            tap.permission,
+            TapPermission::Whitelisted { .. } | TapPermission::Blacklisted { .. }
+        ) && user_id.as_ref().is_some_and(|uid| *uid != tap.owner_id);
+        let requester_discord_id = if needs_discord {
+            self.resolve_requester_discord_id(&user_id).await
+        } else {
+            None
+        };
+        Self::check_access_resolved(tap, &user_id, requester_discord_id.as_deref())
+    }
+
+    /// Query-free access check. Identical semantics to [`check_access`], but the
+    /// requester's discord id is resolved once by the caller instead of being fetched
+    /// per tap — this is what makes bulk listing cheap.
+    fn check_access_resolved(
+        tap: &Tap,
+        user_id: &Option<UserId>,
+        requester_discord_id: Option<&str>,
+    ) -> bool {
+        use hq_types::hq::TapPermission;
+
         match &tap.permission {
             TapPermission::Public => true,
-            TapPermission::OwnerOnly => user_id.map(|id| id == tap.owner_id).unwrap_or(false),
-            TapPermission::Whitelisted { user_ids } => {
-                if let Some(uid) = user_id {
-                    if uid == tap.owner_id {
-                        return true;
-                    }
-                    if let Ok(Some(user)) = self.user_repo.find_by_id(uid).await {
-                        return user_ids.contains(&user.discord_user_id.0);
-                    }
-                }
-                false
+            TapPermission::OwnerOnly => {
+                user_id.as_ref().map(|id| *id == tap.owner_id).unwrap_or(false)
             }
-            TapPermission::Blacklisted { user_ids } => {
-                if let Some(uid) = user_id {
-                    if uid == tap.owner_id {
-                        return true;
-                    }
-                    if let Ok(Some(user)) = self.user_repo.find_by_id(uid).await {
-                        return !user_ids.contains(&user.discord_user_id.0);
-                    }
-                }
-                true
-            }
+            TapPermission::Whitelisted { user_ids } => match user_id {
+                Some(uid) if *uid == tap.owner_id => true,
+                Some(_) => requester_discord_id
+                    .map(|d| user_ids.iter().any(|u| u == d))
+                    .unwrap_or(false),
+                None => false,
+            },
+            TapPermission::Blacklisted { user_ids } => match user_id {
+                Some(uid) if *uid == tap.owner_id => true,
+                Some(_) => requester_discord_id
+                    .map(|d| !user_ids.iter().any(|u| u == d))
+                    .unwrap_or(true),
+                None => true,
+            },
         }
     }
 
-    async fn map_to_tap_dto(&self, tap: Tap) -> TapDto {
-        let total_uses = self
-            .tap_metrics
-            .get_latest_total_uses(&tap.id)
-            .await
-            .unwrap_or(0);
-        let cache_hits = self
-            .tap_metrics
-            .get_latest_cache_hits(&tap.id)
-            .await
-            .unwrap_or(0);
-        let unique_users = self
-            .tap_metrics
-            .get_unique_users_count(tap.id.clone())
-            .await
-            .unwrap_or(0);
-        let accumulated_uptime = self
-            .tap_metrics
-            .get_uptime_secs(tap.id.clone())
-            .await
-            .unwrap_or(0);
-        let online_states = self
-            .tap_hub_state
-            .get_tap_states(&tap.id)
-            .await
-            .unwrap_or_default();
+    /// Build the DTO for one tap. `prefetched_row` lets bulk callers pass the latest
+    /// metrics row they already batch-fetched (see `get_latest_rows`); when `None` the
+    /// row is fetched here for single-tap callers.
+    async fn map_to_tap_dto(&self, tap: Tap, prefetched_row: Option<TapMetricsRow>) -> TapDto {
+        // Fetch the Redis-backed values concurrently. The latest metrics row is either
+        // supplied by the caller (bulk path, already batched) or fetched once here.
+        let (delta, unique_users, accumulated_uptime, online_states) = tokio::join!(
+            self.tap_metrics.redis.peek_delta(&tap.id),
+            self.tap_metrics.get_unique_users_count(tap.id.clone()),
+            self.tap_metrics.get_uptime_secs(tap.id.clone()),
+            self.tap_hub_state.get_tap_states(&tap.id),
+        );
+
+        let row = match prefetched_row {
+            Some(r) => Some(r),
+            None => self.tap_metrics.get_latest_row(&tap.id).await.ok().flatten(),
+        };
+        let (delta_total, delta_cache) = delta.unwrap_or((0, 0));
+        let total_uses =
+            (row.as_ref().map(|r| r.total_uses).unwrap_or(0) + delta_total).max(0) as u64;
+        let cache_hits =
+            (row.as_ref().map(|r| r.cache_hits).unwrap_or(0) + delta_cache).max(0) as u64;
+        let unique_users = unique_users.unwrap_or(0);
+        let accumulated_uptime = accumulated_uptime.unwrap_or(0);
+        let online_states = online_states.unwrap_or_default();
         let active_now = online_states.len() as u64;
         let current_session_secs: u64 = online_states
             .iter()
@@ -655,5 +828,68 @@ impl TapService {
                 cache_hit_rate_history: vec![],
             },
         }
+    }
+}
+
+#[cfg(test)]
+mod access_tests {
+    use super::TapService;
+    use hq_types::hq::{Tap, TapPermission, UserId};
+
+    fn tap_with(permission: TapPermission) -> Tap {
+        let mut t = Tap::new("tap1", "owner1", "name".to_string());
+        t.permission = permission;
+        t
+    }
+
+    fn uid(s: &str) -> Option<UserId> {
+        Some(UserId(s.to_string()))
+    }
+
+    #[test]
+    fn public_is_always_accessible() {
+        let t = tap_with(TapPermission::Public);
+        assert!(TapService::check_access_resolved(&t, &None, None));
+        assert!(TapService::check_access_resolved(&t, &uid("other"), Some("123")));
+    }
+
+    #[test]
+    fn owner_only_grants_owner_only() {
+        let t = tap_with(TapPermission::OwnerOnly);
+        assert!(TapService::check_access_resolved(&t, &uid("owner1"), None));
+        assert!(!TapService::check_access_resolved(&t, &uid("other"), None));
+        assert!(!TapService::check_access_resolved(&t, &None, None));
+    }
+
+    #[test]
+    fn whitelist_grants_owner_and_members_only() {
+        let t = tap_with(TapPermission::Whitelisted {
+            user_ids: vec!["123".to_string()],
+        });
+        // owner always in
+        assert!(TapService::check_access_resolved(&t, &uid("owner1"), Some("999")));
+        // listed member
+        assert!(TapService::check_access_resolved(&t, &uid("other"), Some("123")));
+        // non-member
+        assert!(!TapService::check_access_resolved(&t, &uid("other"), Some("999")));
+        // no user, and user with unresolved discord id → denied
+        assert!(!TapService::check_access_resolved(&t, &None, None));
+        assert!(!TapService::check_access_resolved(&t, &uid("other"), None));
+    }
+
+    #[test]
+    fn blacklist_denies_members_only() {
+        let t = tap_with(TapPermission::Blacklisted {
+            user_ids: vec!["123".to_string()],
+        });
+        // owner always in even if listed
+        assert!(TapService::check_access_resolved(&t, &uid("owner1"), Some("123")));
+        // listed member denied
+        assert!(!TapService::check_access_resolved(&t, &uid("other"), Some("123")));
+        // unlisted allowed
+        assert!(TapService::check_access_resolved(&t, &uid("other"), Some("999")));
+        // no user, and user with unresolved discord id → allowed
+        assert!(TapService::check_access_resolved(&t, &None, None));
+        assert!(TapService::check_access_resolved(&t, &uid("other"), None));
     }
 }

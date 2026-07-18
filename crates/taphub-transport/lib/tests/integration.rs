@@ -292,8 +292,11 @@ fn meta_request() -> AudioRequest {
     }
 }
 
+/// A per-attempt timeout retries the request on a fresh stream (the connection is left
+/// intact — no global reset). The first server call stalls past the 500ms per-attempt
+/// timeout, so the client retries and the second call succeeds.
 #[tokio::test]
-async fn test_request_timeout_resets_and_retries() {
+async fn test_request_timeout_retries_on_fresh_stream() {
     let _ = rustls::crypto::ring::default_provider().install_default();
 
     let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
@@ -325,6 +328,40 @@ async fn test_request_timeout_resets_and_retries() {
     } else {
         panic!("Expected CacheKey");
     }
+}
+
+/// A request that stalls (and is retried) must not tear down a concurrent request:
+/// with the old shared-connection `reset()` the sibling's stream would be killed, but
+/// per-request isolation keeps it alive. Both requests succeed.
+#[tokio::test]
+async fn test_stalled_request_does_not_disturb_concurrent_request() {
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
+    let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let (bound_addr, client_certs) = spawn_server(Arc::new(StallOnceHandler {
+        calls: calls.clone(),
+    }))
+    .await;
+
+    let client = TransportClient::connect(
+        "127.0.0.1:0".parse().unwrap(),
+        &bound_addr.to_string(),
+        "localhost".to_string(),
+        client_certs,
+        Duration::from_millis(500),
+    )
+    .await
+    .expect("Failed to connect client");
+
+    // Fire two requests concurrently. Whichever the server sees first stalls once and is
+    // retried; the other is served straight away. Neither should be torn down.
+    let (a, b) = tokio::join!(
+        client.request_audio_meta(meta_request()),
+        client.request_audio_meta(meta_request()),
+    );
+
+    a.expect("first concurrent request should succeed");
+    b.expect("second concurrent request should succeed");
 }
 
 #[tokio::test]

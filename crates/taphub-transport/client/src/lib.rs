@@ -11,6 +11,7 @@ use std::io::BufReader;
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::path::Path;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 use tokio::sync::mpsc;
 
@@ -20,9 +21,17 @@ use zako3_types::{AudioMetaResponse, AudioRequest, AudioResponse, CachedAudioReq
 
 const RESET_CLOSE_CODE: u64 = 1;
 const MAX_ATTEMPTS: usize = 2;
+/// Number of independent QUIC connections (all over one shared client endpoint) that
+/// requests are round-robined across. A transport-level reset is scoped to the single
+/// connection a failing request landed on, so it never tears down siblings on the other
+/// pooled connections — the whole point of the pool.
+const POOL_SIZE: usize = 4;
 
 pub struct TransportClient {
-    conn: Arc<ReconnectingClient>,
+    /// Pool of independent reconnecting connections. Requests round-robin across them via
+    /// `cursor` so no single connection is a shared point of failure for the whole fleet.
+    conns: Vec<Arc<ReconnectingClient>>,
+    cursor: AtomicUsize,
     request_timeout: Duration,
 }
 
@@ -49,6 +58,8 @@ impl TransportClient {
         config.protofish.keepalive_interval = Some(Duration::from_secs(5));
         config.protofish.keepalive_timeout = Some(Duration::from_secs(15));
 
+        // One shared QUIC client endpoint underlies every pooled connection; QUIC
+        // multiplexes the independent connections over it.
         let client = Arc::new(Client::bind(config).map_err(|e| e.to_string())?);
 
         let reconnect_config = ReconnectConfig {
@@ -58,64 +69,88 @@ impl TransportClient {
             max_retries: None,
         };
 
-        let conn = ReconnectingClient::connect(
-            client,
-            server_addr,
-            server_name,
-            HashMap::new(),
-            reconnect_config,
-        )
-        .await
-        .map_err(|e| e.to_string())?;
+        let mut conns = Vec::with_capacity(POOL_SIZE);
+        for _ in 0..POOL_SIZE {
+            let conn = ReconnectingClient::connect(
+                Arc::clone(&client),
+                server_addr,
+                server_name.clone(),
+                HashMap::new(),
+                reconnect_config.clone(),
+            )
+            .await
+            .map_err(|e| e.to_string())?;
+            conns.push(Arc::new(conn));
+        }
 
         Ok(Self {
-            conn: Arc::new(conn),
+            conns,
+            cursor: AtomicUsize::new(0),
             request_timeout,
         })
     }
 
+    /// Round-robin one connection out of the pool for a single request.
+    fn pick_conn(&self) -> Arc<ReconnectingClient> {
+        let idx = self.cursor.fetch_add(1, Ordering::Relaxed) % self.conns.len();
+        Arc::clone(&self.conns[idx])
+    }
+
     async fn round_trip_once(
-        &self,
+        conn: &ReconnectingClient,
         payload: &[u8],
     ) -> protofish3::Result<(ChanSender, ChanReceiver, Vec<u8>)> {
-        let (sender, mut receiver) = self.conn.open_chan().await?;
+        let (sender, mut receiver) = conn.open_chan().await?;
         sender.send_msg(payload.to_vec()).await?;
         let resp_payload = receiver.recv_msg().await?;
         Ok((sender, receiver, resp_payload))
     }
 
-    /// One request/response exchange with a per-attempt timeout. On timeout or
-    /// transport-level failure the cached connection is reset (forcing a fresh
-    /// QUIC connection) and the request is retried once. Application-level
-    /// `TapHubResponse::Error` is returned as-is, never retried.
+    /// One request/response exchange with a per-attempt timeout, isolated to a single
+    /// pooled connection so a failure here never disturbs sibling requests on the other
+    /// pooled connections. Recovery is scoped:
+    /// - **Timeout**: the request's own QUIC stream is already dropped when the future is
+    ///   cancelled; we do NOT reset the connection (that would tear down unrelated
+    ///   in-flight requests sharing it). We just retry on a fresh stream. Genuinely dead
+    ///   connections are caught by keepalive + `ReconnectingClient`'s auto-reconnect on
+    ///   the next `open_chan`.
+    /// - **Transport error**: reset only *this* pooled connection, then retry.
+    ///
+    /// Application-level `TapHubResponse::Error` is returned as-is, never retried.
+    ///
+    /// Returns the pooled connection the exchange succeeded on so callers that keep
+    /// streaming (e.g. `request_audio`) stay on the same connection.
     async fn round_trip(
         &self,
         payload: Vec<u8>,
-    ) -> Result<(ChanSender, ChanReceiver, TapHubResponse), TapHubError> {
+    ) -> Result<(Arc<ReconnectingClient>, ChanSender, ChanReceiver, TapHubResponse), TapHubError>
+    {
+        let conn = self.pick_conn();
         for attempt in 1..=MAX_ATTEMPTS {
-            match tokio::time::timeout(self.request_timeout, self.round_trip_once(&payload)).await
+            match tokio::time::timeout(self.request_timeout, Self::round_trip_once(&conn, &payload))
+                .await
             {
                 Ok(Ok((sender, receiver, resp_payload))) => {
                     let resp: TapHubResponse = rmp_serde::from_slice(&resp_payload)
                         .map_err(|e| TapHubError::Internal(e.to_string()))?;
-                    return Ok((sender, receiver, resp));
+                    return Ok((conn, sender, receiver, resp));
                 }
                 Ok(Err(e)) if attempt < MAX_ATTEMPTS && is_transport_error(&e) => {
                     tracing::warn!(
                         error = %e,
                         attempt,
-                        "taphub request failed on transport; resetting connection and retrying"
+                        "taphub request failed on transport; resetting this pooled connection and retrying"
                     );
-                    self.conn.reset(RESET_CLOSE_CODE).await;
+                    // Scoped to this one pooled connection — siblings are untouched.
+                    conn.reset(RESET_CLOSE_CODE).await;
                 }
                 Ok(Err(e)) => return Err(TapHubError::Internal(e.to_string())),
                 Err(_) if attempt < MAX_ATTEMPTS => {
                     tracing::warn!(
                         timeout_ms = self.request_timeout.as_millis() as u64,
                         attempt,
-                        "taphub request timed out; resetting connection and retrying"
+                        "taphub request timed out; retrying on a fresh stream (connection left intact)"
                     );
-                    self.conn.reset(RESET_CLOSE_CODE).await;
                 }
                 Err(_) => {
                     return Err(TapHubError::Internal(format!(
@@ -131,7 +166,7 @@ impl TransportClient {
 
     async fn execute_request(&self, req: TapHubRequest) -> Result<TapHubResponse, TapHubError> {
         let payload = rmp_serde::to_vec(&req).map_err(|e| TapHubError::Internal(e.to_string()))?;
-        let (_sender, _receiver, resp) = self.round_trip(payload).await?;
+        let (_conn, _sender, _receiver, resp) = self.round_trip(payload).await?;
         Ok(resp)
     }
 
@@ -139,12 +174,13 @@ impl TransportClient {
         let req_clone = req.clone();
         let payload = rmp_serde::to_vec(&TapHubRequest::RequestAudio(req))
             .map_err(|e| TapHubError::Internal(e.to_string()))?;
-        let (sender, mut receiver, resp) = self.round_trip(payload).await?;
+        let (conn, sender, mut receiver, resp) = self.round_trip(payload).await?;
 
         match resp {
             TapHubResponse::AudioReady(meta) => {
                 let (tx, rx) = mpsc::channel(100);
-                let conn_clone = Arc::clone(&self.conn);
+                // Stream/invalidate on the same pooled connection the request landed on.
+                let conn_clone = conn;
                 let xfer_timeout = self.request_timeout;
                 let invalidate_timeout = self.request_timeout;
 

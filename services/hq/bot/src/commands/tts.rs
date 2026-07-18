@@ -48,6 +48,7 @@ pub async fn speak(
     message: String,
     #[description = "TTS voice to use (defaults to your current voice setting)"]
     #[description_localized("ko", "사용할 TTS 음성 (기본값: 현재 설정된 음성)")]
+    #[autocomplete = "autocomplete_provider"]
     voice: Option<String>,
 ) -> Result<(), Error> {
     // Extract non-Send guild data before the first await.
@@ -284,6 +285,82 @@ pub async fn skip(
     Ok(())
 }
 
+/// Max taps shown in the `/tts voice` picker embed — keeps the description under
+/// Discord's 4096-char limit (and matches the old paginated default of 20).
+const VOICE_LIST_MAX_ENTRIES: usize = 20;
+
+/// Case-insensitive substring filter over cached tap names, capped at Discord's 25
+/// autocomplete-choice limit. Mirrors the server-side search in
+/// `hq_core::service::tap::list_all_accessible`.
+fn filter_tap_names(names: &[String], partial: &str) -> Vec<String> {
+    let q = partial.to_lowercase();
+    names
+        .iter()
+        .filter(|n| n.to_lowercase().contains(&q))
+        .take(25)
+        .cloned()
+        .collect()
+}
+
+async fn autocomplete_provider(ctx: Context<'_>, partial: &str) -> Vec<String> {
+    let discord_id = ctx.author().id.to_string();
+    let service = &ctx.data().service;
+
+    let user_id = match service.tap.get_user_by_discord_id(&discord_id).await {
+        Ok(Some(u)) => Some(u.id),
+        Ok(None) => None,
+        Err(e) => {
+            tracing::error!("Failed to get user for autocomplete: {:?}", e);
+            return vec![];
+        }
+    };
+
+    // Fetch the full accessible name list once (search=None); we filter `partial`
+    // client-side, matching the server-side substring search semantics. The list is
+    // Redis-cached per user (30s TTL) inside `list_accessible_names`, shared across
+    // bot replicas — so this is a cheap cache hit on the hot path.
+    let names = match service.tap.list_accessible_names(user_id).await {
+        Ok(names) => names,
+        Err(e) => {
+            tracing::error!("Failed to list taps for autocomplete: {:?}", e);
+            return vec![];
+        }
+    };
+
+    filter_tap_names(&names, partial)
+}
+
+#[cfg(test)]
+mod autocomplete_tests {
+    use super::filter_tap_names;
+
+    fn names() -> Vec<String> {
+        ["Google", "OpenAI", "ElevenLabs", "google-ko"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect()
+    }
+
+    #[test]
+    fn matches_case_insensitively() {
+        let out = filter_tap_names(&names(), "goog");
+        assert_eq!(out, vec!["Google".to_string(), "google-ko".to_string()]);
+    }
+
+    #[test]
+    fn empty_partial_returns_all() {
+        let out = filter_tap_names(&names(), "");
+        assert_eq!(out.len(), names().len());
+    }
+
+    #[test]
+    fn caps_at_25() {
+        let many: Vec<String> = (0..100).map(|i| format!("voice{i}")).collect();
+        let out = filter_tap_names(&many, "voice");
+        assert_eq!(out.len(), 25);
+    }
+}
+
 /// Change your TTS voice.
 #[poise::command(
     slash_command,
@@ -295,6 +372,7 @@ pub async fn voice(
     ctx: Context<'_>,
     #[description = "The voice provider to use"]
     #[description_localized("ko", "사용할 음성 제공자")]
+    #[autocomplete = "autocomplete_provider"]
     provider: Option<String>,
     #[description = "Where to save this preference (default: All Guilds)"]
     #[description_localized("ko", "설정을 저장할 범위 (기본값: 모든 서버)")]
@@ -310,19 +388,14 @@ pub async fn voice(
         .await?;
 
     if let Some(ref tap_name) = provider {
-        // Validate the tap exists and is accessible
-        let taps = service.tap.list_all_paginated(Some(user.id.clone()), None, None, None, None, Some(true), None, None).await?;
-        let found = taps
-            .data
-            .iter()
-            .find(|t| t.tap.name.eq_ignore_ascii_case(tap_name));
+        // Validate the tap exists and is accessible; name-only lookup, no enrichment.
+        let found = service
+            .tap
+            .find_accessible_by_name(Some(user.id.clone()), tap_name)
+            .await?
+            .ok_or_else(|| CoreError::NotFound(format!("Voice '{}' not found.", tap_name)))?;
 
-        if found.is_none() {
-            return Err(CoreError::NotFound(format!("Voice '{}' not found.", tap_name)).into());
-        }
-
-        let found = found.unwrap();
-        let tap_id = TapId::from(found.tap.id.clone());
+        let tap_id = found.id;
         let partial = PartialUserSettings {
             tts_voice: UserSettingsField::Normal(Some(tap_id)),
             ..PartialUserSettings::empty()
@@ -354,9 +427,11 @@ pub async fn voice(
 
         ctx.say(ui::messages::voice_changed(tap_name)).await?;
     } else {
-        // Show available voices
-        let taps = service.tap.list_all_paginated(Some(user.id), None, None, None, None, Some(true), None, None).await?;
-        let embed = ui::embeds::tap_list_embed(&taps.data);
+        // Show available voices. The list is sorted most-used first; cap it so the
+        // embed description stays under Discord's 4096-char limit.
+        let mut taps = service.tap.list_all_accessible(Some(user.id)).await?;
+        taps.truncate(VOICE_LIST_MAX_ENTRIES);
+        let embed = ui::embeds::tap_list_embed(&taps);
         ctx.send(
             poise::CreateReply::default()
                 .content("Choose a voice from your Taps:")

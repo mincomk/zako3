@@ -9,6 +9,9 @@ pub trait UserRepository: Send + Sync {
     async fn find_by_discord_id(&self, discord_id: &str) -> CoreResult<Option<User>>;
     async fn create(&self, user: &User) -> CoreResult<User>;
     async fn find_by_id(&self, id: UserId) -> CoreResult<Option<User>>;
+    /// Batch-fetch users by id in a single query. Returns only the users that exist
+    /// (missing ids are simply absent), in unspecified order.
+    async fn find_by_ids(&self, ids: Vec<UserId>) -> CoreResult<Vec<User>>;
     async fn list_all(&self, page: u32, per_page: u32) -> CoreResult<(Vec<User>, u64)>;
     async fn update_permissions(&self, id: UserId, permissions: Vec<String>) -> CoreResult<User>;
     async fn set_banned_status(&self, id: UserId, banned: bool) -> CoreResult<User>;
@@ -141,6 +144,47 @@ impl UserRepository for PgUserRepository {
         } else {
             Ok(None)
         }
+    }
+
+    async fn find_by_ids(&self, ids: Vec<UserId>) -> CoreResult<Vec<User>> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let ids_str: Vec<String> = ids.into_iter().map(|id| id.0).collect();
+        let rows = sqlx::query("SELECT id, discord_user_id, username, avatar_url, email, oauth_access_token, permissions, banned, created_at, updated_at FROM users WHERE id = ANY($1)")
+            .bind(&ids_str)
+            .fetch_all(&self.pool)
+            .await?;
+
+        let mut users = Vec::with_capacity(rows.len());
+        for row in rows {
+            let id: String = row.try_get("id")?;
+            let discord_user_id: String = row.try_get("discord_user_id")?;
+            let username: String = row.try_get("username")?;
+            let avatar_url: Option<String> = row.try_get("avatar_url")?;
+            let email: Option<String> = row.try_get("email")?;
+            let oauth_access_token: Option<String> = row.try_get("oauth_access_token")?;
+            let permissions: Vec<String> = row.try_get("permissions").unwrap_or_default();
+            let banned: bool = row.try_get("banned")?;
+            let created_at: chrono::DateTime<chrono::Utc> = row.try_get("created_at")?;
+            let updated_at: chrono::DateTime<chrono::Utc> = row.try_get("updated_at")?;
+
+            users.push(User {
+                id: UserId(id),
+                discord_user_id: DiscordUserId(discord_user_id),
+                username: Username(username),
+                avatar_url,
+                email,
+                oauth_access_token,
+                permissions,
+                banned,
+                timestamp: hq_types::hq::ResourceTimestamp {
+                    created_at,
+                    updated_at,
+                },
+            });
+        }
+        Ok(users)
     }
 
     async fn list_all(&self, page: u32, per_page: u32) -> CoreResult<(Vec<User>, u64)> {
