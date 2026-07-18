@@ -105,7 +105,10 @@ pub fn bridge_pf3_recv(
             }
         }
     });
-    (RelChunkStream { rx: rel_rx }, UnrelChunkStream { rx: unrel_rx })
+    (
+        RelChunkStream { rx: rel_rx },
+        UnrelChunkStream { rx: unrel_rx },
+    )
 }
 
 async fn pump_dual(
