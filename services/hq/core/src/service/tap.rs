@@ -5,19 +5,19 @@ use crate::{CoreError, CoreResult};
 use chrono::Utc;
 use hq_types::hq::{
     CreateTapDto, PaginatedResponseDto, PaginationMetaDto, Tap, TapDto, TapId, TapName, TapRole,
-    TapStatsDto, TapWithAccessDto, TimeSeriesPointDto, UserId, UserSummaryDto,
+    TapStatsDto, TapWithAccessDto, TimeSeriesPointDto, User, UserId, UserSummaryDto,
 };
-use futures_util::stream::{self, StreamExt, TryStreamExt};
+use futures_util::stream::{self, StreamExt};
 use serde::Deserialize;
+use std::collections::HashMap;
 use std::sync::Arc;
-use zako3_metrics::TapMetricsService;
+use zako3_metrics::{TapMetricsRow, TapMetricsService};
 use zako3_states::TapHubStateService;
 
-/// Max taps enriched concurrently. Bounds the fan-out of per-tap backend calls so a
-/// large listing doesn't stampede Postgres/Timescale/Redis while still cutting the
-/// wall-clock latency of the previously-sequential enrichment loop. Must stay below
-/// the sqlx pool size (5, see `db::get_pool`) or a single listing call monopolizes
-/// every connection and starves other queries.
+/// Max taps enriched concurrently. Owner + latest-metrics lookups are now batched into
+/// one Postgres query each per listing (see `batch_owner_and_rows`), so a listing holds
+/// at most one sqlx connection regardless of tap count — this bound only caps the
+/// remaining per-tap Redis fan-out in `map_to_tap_dto`, not the sqlx pool.
 const ENRICH_CONCURRENCY: usize = 4;
 
 #[derive(Deserialize, Debug, Clone, PartialEq)]
@@ -115,7 +115,7 @@ impl TapService {
 
         let mut tap_dtos = Vec::new();
         for tap in taps {
-            let tap_dto = self.map_to_tap_dto(tap).await;
+            let tap_dto = self.map_to_tap_dto(tap, None).await;
 
             let tap_with_access = TapWithAccessDto {
                 tap: tap_dto,
@@ -142,17 +142,18 @@ impl TapService {
         })
     }
 
-    /// Enrich a raw tap into a `TapWithAccessDto`. The access decision is computed by
-    /// the caller (query-free, once the requester is resolved) and passed in; this only
-    /// does the owner lookup and dto map, run concurrently.
-    async fn enrich_tap(&self, tap: Tap, has_access: bool) -> CoreResult<TapWithAccessDto> {
-        let (owner, tap_dto) = tokio::join!(
-            self.user_repo.find_by_id(tap.owner_id.clone()),
-            self.map_to_tap_dto(tap.clone()),
-        );
-        let owner = owner?.ok_or(CoreError::NotFound("Owner not found".to_string()))?;
-
-        Ok(TapWithAccessDto {
+    /// Enrich a raw tap into a `TapWithAccessDto`. Both the access decision and the
+    /// owner + latest metrics row are resolved by the caller (batched, query-free once
+    /// per listing) and passed in; the only remaining work is the Redis-backed dto map.
+    async fn enrich_tap(
+        &self,
+        tap: Tap,
+        has_access: bool,
+        owner: &User,
+        row: Option<TapMetricsRow>,
+    ) -> TapWithAccessDto {
+        let tap_dto = self.map_to_tap_dto(tap, row).await;
+        TapWithAccessDto {
             tap: tap_dto,
             has_access,
             owner: UserSummaryDto {
@@ -160,7 +161,7 @@ impl TapService {
                 username: owner.username.0.clone(),
                 avatar: owner.avatar_url.clone().unwrap_or_default(),
             },
-        })
+        }
     }
 
     /// Resolve the requester's discord id with a single query so per-tap access checks
@@ -178,6 +179,26 @@ impl TapService {
         }
     }
 
+    /// Batch-fetch, in one Postgres query each, the owner and latest-metrics-row maps for
+    /// a set of taps — so the per-tap enrichment fan-out needs no further Postgres
+    /// round-trips (removes the previous per-tap owner/metrics N+1). Missing owners/rows
+    /// are simply absent from the returned maps.
+    async fn batch_owner_and_rows(
+        &self,
+        taps: &[Tap],
+    ) -> CoreResult<(HashMap<UserId, User>, HashMap<TapId, TapMetricsRow>)> {
+        let owner_ids: Vec<UserId> = taps.iter().map(|t| t.owner_id.clone()).collect();
+        let tap_ids: Vec<TapId> = taps.iter().map(|t| t.id.clone()).collect();
+        let (owners, rows) = tokio::join!(
+            self.user_repo.find_by_ids(owner_ids),
+            self.tap_metrics.get_latest_rows(&tap_ids),
+        );
+        let owners: HashMap<UserId, User> =
+            owners?.into_iter().map(|u| (u.id.clone(), u)).collect();
+        let rows = rows.unwrap_or_default();
+        Ok((owners, rows))
+    }
+
     /// Returns every tap the user can access, unpaginated, sorted most-used first.
     /// Used by the bot where the full list is required (autocomplete, validation,
     /// listing) — unlike `list_all_paginated`, which caps results for API callers.
@@ -192,11 +213,27 @@ impl TapService {
         let requester_discord_id = self.resolve_requester_discord_id(&user_id).await;
         taps.retain(|t| Self::check_access_resolved(t, &user_id, requester_discord_id.as_deref()));
 
+        // Batch the owner + metrics lookups once, then fan out the Redis-backed dto map.
+        let (owners, rows) = self.batch_owner_and_rows(&taps).await?;
         let mut out: Vec<TapWithAccessDto> = stream::iter(taps)
-            .map(|tap| self.enrich_tap(tap, true))
+            .map(|tap| {
+                let owner = owners.get(&tap.owner_id).cloned();
+                let row = rows.get(&tap.id).cloned();
+                async move {
+                    let owner = match owner {
+                        Some(o) => o,
+                        None => {
+                            tracing::warn!(tap_id = %tap.id, "skipping tap with missing owner");
+                            return None;
+                        }
+                    };
+                    Some(self.enrich_tap(tap, true, &owner, row).await)
+                }
+            })
             .buffer_unordered(ENRICH_CONCURRENCY)
-            .try_collect()
-            .await?;
+            .filter_map(|x| async move { x })
+            .collect()
+            .await;
 
         out.sort_by(|a, b| b.tap.total_uses.cmp(&a.tap.total_uses));
         Ok(out)
@@ -281,16 +318,30 @@ impl TapService {
             });
         }
 
-        // 4. Enrich surviving taps concurrently, carrying the query-free access decision.
+        // 4. Batch owner + metrics lookups once, then enrich surviving taps concurrently,
+        //    carrying the query-free access decision.
+        let (owners, rows) = self.batch_owner_and_rows(&taps).await?;
         let mut tap_dtos: Vec<TapWithAccessDto> = stream::iter(taps)
             .map(|tap| {
                 let has_access =
                     Self::check_access_resolved(&tap, &user_id, requester_discord_id.as_deref());
-                self.enrich_tap(tap, has_access)
+                let owner = owners.get(&tap.owner_id).cloned();
+                let row = rows.get(&tap.id).cloned();
+                async move {
+                    let owner = match owner {
+                        Some(o) => o,
+                        None => {
+                            tracing::warn!(tap_id = %tap.id, "skipping tap with missing owner");
+                            return None;
+                        }
+                    };
+                    Some(self.enrich_tap(tap, has_access, &owner, row).await)
+                }
             })
             .buffer_unordered(ENRICH_CONCURRENCY)
-            .try_collect()
-            .await?;
+            .filter_map(|x| async move { x })
+            .collect()
+            .await;
 
         // 5. Sort
         let desc = sort_direction.as_ref() != Some(&SortDirection::Asc);
@@ -352,7 +403,7 @@ impl TapService {
 
         let has_access = self.check_access(&tap, user_id).await;
 
-        let tap_dto = self.map_to_tap_dto(tap).await;
+        let tap_dto = self.map_to_tap_dto(tap, None).await;
 
         Ok(TapWithAccessDto {
             tap: tap_dto,
@@ -710,19 +761,23 @@ impl TapService {
         }
     }
 
-    async fn map_to_tap_dto(&self, tap: Tap) -> TapDto {
-        // Fetch every backend value concurrently, and fetch the latest metrics row a
-        // single time — `total_uses` and `cache_hits` both derive from it plus the same
-        // Redis delta, so there's no need for two round-trips each.
-        let (row, delta, unique_users, accumulated_uptime, online_states) = tokio::join!(
-            self.tap_metrics.get_latest_row(&tap.id),
+    /// Build the DTO for one tap. `prefetched_row` lets bulk callers pass the latest
+    /// metrics row they already batch-fetched (see `get_latest_rows`); when `None` the
+    /// row is fetched here for single-tap callers.
+    async fn map_to_tap_dto(&self, tap: Tap, prefetched_row: Option<TapMetricsRow>) -> TapDto {
+        // Fetch the Redis-backed values concurrently. The latest metrics row is either
+        // supplied by the caller (bulk path, already batched) or fetched once here.
+        let (delta, unique_users, accumulated_uptime, online_states) = tokio::join!(
             self.tap_metrics.redis.peek_delta(&tap.id),
             self.tap_metrics.get_unique_users_count(tap.id.clone()),
             self.tap_metrics.get_uptime_secs(tap.id.clone()),
             self.tap_hub_state.get_tap_states(&tap.id),
         );
 
-        let row = row.ok().flatten();
+        let row = match prefetched_row {
+            Some(r) => Some(r),
+            None => self.tap_metrics.get_latest_row(&tap.id).await.ok().flatten(),
+        };
         let (delta_total, delta_cache) = delta.unwrap_or((0, 0));
         let total_uses =
             (row.as_ref().map(|r| r.total_uses).unwrap_or(0) + delta_total).max(0) as u64;

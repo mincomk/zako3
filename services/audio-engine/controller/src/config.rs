@@ -53,8 +53,14 @@ fn default_taphub_transport_cert_file() -> String {
     "cert.pem".to_string()
 }
 
+/// Per-attempt taphub request timeout. Chosen to satisfy the timeout hierarchy so a
+/// command that makes back-to-back taphub calls (a normal `play`: `request_audio_meta`
+/// then `request_audio`) still finishes inside the 25s command backstop:
+///   N_seq(2) × MAX_ATTEMPTS(2) × per_attempt(6s) = 24s ≤ backstop(25s) < TL dispatch(30s).
+/// If legitimately-slow calls need more than 6s, raise this AND the backstop
+/// (`server.rs`) and TL's dispatch timeout together to keep the inequality holding.
 fn default_taphub_request_timeout_ms() -> u64 {
-    10_000
+    6_000
 }
 
 fn default_service_name() -> String {
