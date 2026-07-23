@@ -24,10 +24,22 @@ async fn main() -> Result<()> {
     // Optional Redis connection for metrics persistence.
     let cache_repo: Option<Arc<zako3_states::RedisCacheRepository>> =
         if let Some(url) = config.redis_url.as_deref() {
-            let repo = zako3_states::RedisCacheRepository::new(url)
-                .await
-                .context("failed to connect to Redis")?;
-            Some(Arc::new(repo))
+            match tokio::time::timeout(
+                std::time::Duration::from_secs(5),
+                zako3_states::RedisCacheRepository::new(url),
+            )
+            .await
+            {
+                Ok(Ok(repo)) => Some(Arc::new(repo)),
+                Ok(Err(e)) => {
+                    tracing::warn!(%e, "Redis connect failed; continuing without cache repo");
+                    None
+                }
+                Err(_) => {
+                    tracing::warn!("Redis connect timed out; continuing without cache repo");
+                    None
+                }
+            }
         } else {
             None
         };
