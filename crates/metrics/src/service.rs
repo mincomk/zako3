@@ -82,6 +82,45 @@ impl TapMetricsService {
         }))
     }
 
+    /// Batch variant of [`get_latest_row`]: the latest metrics row per tap in a single
+    /// query, keyed by tap id. Taps with no rows (or when TimescaleDB is disabled) are
+    /// simply absent from the map. Used by bulk listing to avoid a per-tap round-trip.
+    pub async fn get_latest_rows(
+        &self,
+        tap_ids: &[TapId],
+    ) -> Result<std::collections::HashMap<TapId, TapMetricsRow>> {
+        let mut out = std::collections::HashMap::new();
+        let Some(pool) = self.timescale_pool.as_ref() else {
+            return Ok(out);
+        };
+        if tap_ids.is_empty() {
+            return Ok(out);
+        }
+        let ids: Vec<String> = tap_ids.iter().map(|t| t.0.clone()).collect();
+        let rows = sqlx::query(
+            "SELECT DISTINCT ON (tap_id) tap_id, time, total_uses, cache_hits, active_now, unique_users \
+             FROM tap_metrics WHERE tap_id = ANY($1) ORDER BY tap_id, time DESC",
+        )
+        .bind(&ids)
+        .fetch_all(pool)
+        .await?;
+
+        for r in rows {
+            let tap_id: String = r.get("tap_id");
+            out.insert(
+                TapId(tap_id),
+                TapMetricsRow {
+                    time: r.get("time"),
+                    total_uses: r.get("total_uses"),
+                    cache_hits: r.get("cache_hits"),
+                    active_now: r.get("active_now"),
+                    unique_users: r.get("unique_users"),
+                },
+            );
+        }
+        Ok(out)
+    }
+
     pub async fn get_latest_total_uses(&self, tap_id: &TapId) -> Result<u64> {
         let base = self
             .get_latest_row(tap_id)
